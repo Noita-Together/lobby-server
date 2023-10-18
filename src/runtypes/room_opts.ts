@@ -47,7 +47,6 @@ export const validateRoomOpts = <
   if (password) opts.password = password.trim();
 
   if (!Value.Check(schema, opts)) {
-    console.log(opts);
     const fields = [...Value.Errors(schema, opts)].map((ve) => {
       console.error(`${ve.path}: ${ve.message} (${ve.value})`);
       return ve.path.slice(1);

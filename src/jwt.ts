@@ -9,7 +9,6 @@ export const verifyToken = (token: string): Promise<ClientAuth> =>
   new Promise((resolve, reject) => {
     jwt.verify(token, SECRET_ACCESS, (err, decoded: unknown) => {
       if (err) {
-        console.error('Failed JWT verification', err.message);
         reject(new Error(`JWT verification failed: ${err.message}`));
         return;
       }

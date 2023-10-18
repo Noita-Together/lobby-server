@@ -1,6 +1,6 @@
 import * as NT from '../gen/messages_pb';
 import { UserState } from './user';
-import { SYSTEM_USER } from './lobby';
+import { LobbyState, SYSTEM_USER } from './lobby';
 import { M } from '../util';
 import {
   CreateBigRoomOpts,
@@ -12,6 +12,9 @@ import {
 import { GameActions, Handler, Handlers } from '../types';
 import { Publishers } from '../util';
 import { ClientRoomFlagsUpdate, ClientRunOver, ClientStartRun, Envelope } from '../gen/messages_pb';
+
+import Debug from 'debug';
+const debug = Debug('nt:room');
 
 let id = 0;
 const emptyFlags = M.sRoomFlagsUpdated().toBinary();
@@ -35,14 +38,11 @@ export type RoomUpdate = {
   password?: string; // lol. remove?
 };
 
-type RemoveMessageCtor = {
-  new (data: { userId?: string }): NT.ServerUserLeftRoom | NT.ServerUserKicked | NT.ServerUserBanned;
-};
-
 type RoomStateCreateOpts = CreateRoomOpts | CreateBigRoomOpts;
 type RoomStateUpdateOpts = UpdateRoomOpts | UpdateBigRoomOpts;
 
 export class RoomState implements Handlers<GameActions> {
+  private readonly lobby: LobbyState;
   private readonly chat: ReturnType<Publishers['chat']>;
   private readonly broadcast: ReturnType<Publishers['broadcast']>;
 
@@ -51,7 +51,6 @@ export class RoomState implements Handlers<GameActions> {
   readonly topic: string;
 
   private users = new Set<UserState>();
-  private disconnectedUsers = new Set<string>();
   private bannedUsers = new Set<string>();
 
   private name: string;
@@ -64,10 +63,13 @@ export class RoomState implements Handlers<GameActions> {
   private lastFlags: Uint8Array = emptyFlags;
 
   private constructor(
+    lobby: LobbyState,
     owner: UserState,
     { name, password, gamemode, maxUsers }: RoomStateCreateOpts,
     publishers: Publishers,
   ) {
+    this.lobby = lobby;
+
     this.id = `${id++}`;
     this.owner = owner;
     this.topic = `/room/${this.id}`;
@@ -117,20 +119,12 @@ export class RoomState implements Handlers<GameActions> {
     return update;
   }
 
-  canJoin(user: UserState, password?: string): null | string {
-    if (this.bannedUsers.has(user.id)) return 'Banned from this room.';
-    if (this.users.size >= this.maxUsers) return 'Room is full.';
-    if (this.password && this.password !== password) return 'Bad password.';
-
-    // allow disconnected users to rejoin locked rooms
-    if (this.disconnectedUsers.has(user.id)) return null;
-
-    if (this.locked) return 'Room is locked.';
-
-    return null;
-  }
-
-  static create(owner: UserState, _opts: RoomStateCreateOpts, publishers: Publishers): RoomState | string {
+  static create(
+    lobby: LobbyState,
+    owner: UserState,
+    _opts: RoomStateCreateOpts,
+    publishers: Publishers,
+  ): RoomState | string {
     let opts: RoomStateCreateOpts | string;
     if (process.env.DEV_MODE === 'true' && owner.uaccess < 3) {
       opts = 'Room creation is disabled at the moment, Server is in dev mode :)';
@@ -142,14 +136,29 @@ export class RoomState implements Handlers<GameActions> {
 
     if (typeof opts === 'string') return opts;
 
-    return new RoomState(owner, opts, publishers);
+    const room = new RoomState(lobby, owner, opts, publishers);
+
+    debug(room.id, 'created');
+
+    return room;
   }
 
-  update(_opts: RoomStateUpdateOpts): string | void {
-    console.log('update', _opts);
+  update(actor: UserState, _opts: RoomStateUpdateOpts): string | void {
+    if (this.owner !== actor) return "Can't do that.";
+
+    // TODO: is this valid during a run?
 
     const opts = validateRoomOpts(this.owner.uaccess > 1 ? UpdateBigRoomOpts : UpdateRoomOpts, _opts);
     if (typeof opts === 'string') return opts;
+
+    if (debug.enabled) {
+      debug(this.id, 'updating options', {
+        name: `\`${this.name}\`->\`${_opts.name}\`->\`${opts.name}\``,
+        gamemode: `\`${this.gamemode}\`->\`${_opts.gamemode}\`->\`${opts.gamemode}\``,
+        maxUsers: `\`${this.maxUsers}\`->\`${_opts.maxUsers}\`->\`${opts.maxUsers}\``,
+        locked: `\`${this.locked}\`->\`${_opts.locked}\`->\`${opts.locked}\``,
+      });
+    }
 
     if (opts.name) this.name = opts.name;
     if (opts.password) this.password = opts.password;
@@ -160,75 +169,128 @@ export class RoomState implements Handlers<GameActions> {
     this.broadcast(M.sRoomUpdated(opts));
   }
 
-  setFlags(payload: ClientRoomFlagsUpdate): string | void {
+  setFlags(actor: UserState, payload: ClientRoomFlagsUpdate): string | void {
+    if (this.owner !== actor) return "Can't do that.";
+
+    // TODO: is this valid during a run?
+
+    debug(this.id, 'updating flags', payload);
     const flags = M.sRoomFlagsUpdated(payload).toBinary();
     this.lastFlags = flags;
     this.broadcast(flags);
   }
 
-  startRun(payload: ClientStartRun) {
-    this.inProgress = true;
-    this.broadcast(M.sHostStart({ ...payload }));
+  getFlags(): Uint8Array {
+    return this.lastFlags;
   }
 
-  runOver(payload: ClientRunOver) {
+  startRun(actor: UserState, payload: ClientStartRun) {
+    // no error for this yet
+    if (this.owner !== actor) return;
+
+    debug(this.id, 'start run');
+
+    this.inProgress = true;
+
+    // current server just sends this with {forced: false} even though
+    // the message payload contains various things. imitating that for now
+    this.broadcast(M.sHostStart({ forced: false }));
+
+    // this.broadcast(M.sHostStart(payload));
+  }
+
+  finishRun(actor: UserState, payload: ClientRunOver) {
+    // no error for this yet
+    if (this.owner !== actor) return;
+
+    debug(this.id, 'finish run');
+
     this.inProgress = false;
     // this doesn't send a PB message?
     // TODO: reset "modCheck" and ready states
   }
 
-  joined(user: UserState) {
-    this.disconnectedUsers.delete(user.id);
-    this.users.add(user);
-    if (this.owner !== user) {
-      // the app doesn't expect a join message for the owner
-      this.broadcast(
-        M.sUserJoinedRoom({
-          userId: user.id,
-          name: user.name,
-        }),
-      );
-    }
-    user.send(M.sJoinRoomSuccess(this.getState({ withUsers: true, withPassword: true })));
-    // the app can't deal with receiving an empty/default flags update
-    // TODO: fix that, then we can always send
-    if (this.lastFlags !== emptyFlags) {
-      user.send(this.lastFlags);
-    }
-  }
+  join(user: UserState, password?: string): string | null {
+    if (user.room() !== null) return 'Already in a room.';
+    if (this.bannedUsers.has(user.id)) return 'Banned from this room.';
+    if (this.users.size >= this.maxUsers) return 'Room is full.';
+    if (this.password && this.password !== password) return 'Bad password.';
+    if (this.locked) return 'Room is locked.';
 
-  private removeUser<T extends (data: { userId: string }) => Envelope>(msgType: T, user: UserState, message: string) {
-    this.users.delete(user);
+    this.users.add(user);
+
+    // broadcast the join to everyone except the user that joined
+    // that user will receive a different confirmation in `user.joined`
     this.broadcast(
-      msgType({
+      M.sUserJoinedRoom({
         userId: user.id,
+        name: user.name,
       }),
     );
-    this.chat(SYSTEM_USER, `${user.name} ${message}.`);
+
+    user.joined(this);
+
+    debug(this.id, 'user joined', user.id, user.name);
+    return null;
   }
 
-  parted(user: UserState) {
-    this.removeUser(M.sUserLeftRoom, user, 'has left');
-  }
-
-  disconnected(user: UserState) {
-    this.disconnectedUsers.add(user.id);
-    this.removeUser(M.sUserLeftRoom, user, 'disconnected');
-  }
-
-  kicked(user: UserState) {
-    this.removeUser(M.sUserKicked, user, 'has been kicked from this room');
-  }
-
-  banned(user: UserState) {
-    this.bannedUsers.add(user.id);
-    this.removeUser(M.sUserBanned, user, 'has been banned from this room');
-  }
-
-  destroy() {
-    for (const user of this.users) {
-      user.part();
+  private removeUser<T extends (...args: any) => Envelope>(
+    actor: UserState | null,
+    target: UserState | undefined,
+    pb: T,
+    message: string,
+  ) {
+    if (!target) {
+      // this should never happen, but the return type of (Map)users.get(userid) is _technically_
+      // UserState|undefined, so if some state gets wrong we want to know about it
+      console.error('BUG: removeUser called with an undefined user', new Error().stack);
+      return;
     }
+
+    // when actor is specified, it's an admin action like a kick or a ban. there's
+    // no response message in the proto yet to describe a failed attempt, so we just
+    // ignore these
+    if (actor !== null && this.owner !== actor) return;
+
+    if (this.owner === target) {
+      // when the owner leaves the room, destroy it
+      this.destroy();
+    } else {
+      this.users.delete(target);
+      this.broadcast(pb({ userId: target.id }));
+      this.chat(SYSTEM_USER, `${target.name} ${message}.`);
+    }
+
+    debug(this.id, 'user left', target.id, target.name, message);
+  }
+
+  part(actor: UserState) {
+    this.removeUser(null, actor, M.sUserLeftRoom, 'has left');
+  }
+
+  kick(actor: UserState, target?: UserState) {
+    this.removeUser(actor, target, M.sUserKicked, 'has been kicked from this room');
+  }
+
+  ban(actor: UserState, target?: UserState) {
+    this.removeUser(actor, target, M.sUserBanned, 'has been banned from this room');
+  }
+
+  delete(actor: UserState) {
+    // no error for this one either if invalid
+    if (this.owner !== actor) return;
+
+    this.destroy();
+    debug(this.id, 'deleted');
+  }
+
+  private destroy() {
+    for (const user of this.users) {
+      user.parted(this);
+      this.users.delete(user);
+    }
+
+    this.lobby.roomDestroyed(this);
   }
 
   //// message handlers ////

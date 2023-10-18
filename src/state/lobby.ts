@@ -3,9 +3,14 @@ import { Handler, Handlers, LobbyActions } from '../types';
 import { IUser, UserState } from './user';
 import { RoomState, RoomUpdate } from './room';
 import { Publishers, M } from '../util';
+import { WebSocket } from 'uWebsockets.js';
+import { ClientAuth } from '../runtypes/client_auth';
 
 export const SYSTEM_USER: IUser = { id: '-1', name: '[SYSTEM]' };
 export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]' };
+
+import Debug from 'debug';
+const debug = Debug('nt:lobby');
 
 export class LobbyState implements Handlers<LobbyActions> {
   private readonly publishers: Publishers;
@@ -23,21 +28,68 @@ export class LobbyState implements Handlers<LobbyActions> {
     this.chat = publishers.chat(this.topic);
   }
 
+  userConnected(ws: WebSocket<ClientAuth>): UserState {
+    // rooms retain a reference to the UserState of their owner and any users present in the room.
+    // if the user gets disconnected, we don't want to destroy the room (and possibly kick everybody
+    // out if it was the host that disconnected) -- we want them to be able to reconnect and pick up
+    // where they left off. however, we have no guarantee they are coming back, either. in order to
+    // allow a reconnecting user to "adopt" their previous state, when a user gets disconnected, and
+    // only if they were in a room, we'll keep a reference from the user's id to the room's id. when
+    // a user connects, if the room they used to be in still exists, we'll find their old state and
+    // communicate it back to them. if it does not exist, we can create a new UserState.
+    //
+    // TODO: make electron app gracefully close the websocket, so we know the difference between
+    // the user intentionally exiting and getting disconnected unexpectedly
+    //
+    // TODO: we can clean up dangling rooms after they've been dead for a certain amount of time,
+    // and should have some information communicated on the RoomState to describe rooms that have
+    // no connected host.
+
+    const { sub: id, preferred_username: name } = ws.getUserData();
+    debug(id, name, 'connected');
+
+    // TODO: what happens if a user launches multiple clients?
+    let user: UserState | undefined = this.users.get(id);
+    if (user) {
+      user.reconnected(ws);
+    } else {
+      user = new UserState(this, { id, name }, ws);
+      user.connected(ws);
+    }
+
+    return user;
+  }
+
+  userDisconnected(user: UserState, code: number, message: ArrayBuffer) {
+    debug(user.id, user.name, 'disconnected');
+    // TODO: NT app needs to send a graceful exit so we can tell the difference between
+    // a quit and a disconnect. pick that up at the uWS app layer (websocket close code?)
+    // and communicate it here.
+
+    // if the user is not in a room, we can safely clean them up
+    if (user.room() === null) {
+      this.users.delete(user.id);
+      user.destroy();
+    } else {
+      // if the user _is_ in a room, we'll leave them in the list in case
+      // they reconnect.
+      user.disconnected();
+    }
+  }
+
   // add a user's "existence" to the lobby
   addUser(user: UserState) {
     this.users.set(user.id, user);
   }
 
-  // remove a user's "existence" from the lobby
-  delUser(user: UserState) {
-    this.users.delete(user.id);
+  roomDestroyed(room: RoomState) {
+    this.rooms.delete(room.id);
   }
 
   //// message handlers ////
 
   cRoomCreate: Handler<NT.ClientRoomCreate> = (payload, user) => {
-    console.log('cRoomCreate', payload);
-    const room = RoomState.create(user, { ...payload, locked: false }, this.publishers);
+    const room = RoomState.create(this, user, { ...payload, locked: false }, this.publishers);
 
     if (typeof room === 'string') {
       user.send(M.sRoomCreateFailed({ reason: room }));
@@ -50,29 +102,23 @@ export class LobbyState implements Handlers<LobbyActions> {
     user.send(M.sRoomCreated(roomData));
     this.broadcast(M.sRoomAddToList({ room: roomData }));
 
-    user.join(room);
+    // TODO: creator is implicitly joined to the room currently.
+    // we can reduce complexity of behavior by making it explicit
+    // room.join(user);
   };
 
   cRoomDelete: Handler<NT.ClientRoomDelete> = (payload, user) => {
-    user.roomAdmin((room) => {
-      room.destroy();
-      this.rooms.delete(room.id);
-    });
+    user.room()?.delete(user);
   };
 
   cRoomUpdate: Handler<NT.ClientRoomUpdate> = (payload, user) => {
-    user.roomAdmin(
-      (room) => room.update(payload),
-      (reason) => M.sRoomUpdateFailed({ reason }),
-    );
+    const reason = user.room()?.update(user, payload);
+    if (reason) user.send(M.sRoomUpdateFailed({ reason }));
   };
 
   cRoomFlagsUpdate: Handler<NT.ClientRoomFlagsUpdate> = (payload, user) => {
-    console.log('cRoomFlagsUpdate', payload);
-    user.roomAdmin(
-      (room) => {}, //room.setFlags(payload),
-      (reason) => M.sRoomFlagsUpdateFailed({ reason }),
-    );
+    const reason = user.room()?.setFlags(user, payload);
+    if (reason) user.send(M.sRoomFlagsUpdateFailed({ reason }));
   };
 
   cJoinRoom: Handler<NT.ClientJoinRoom> = (payload, user) => {
@@ -81,33 +127,29 @@ export class LobbyState implements Handlers<LobbyActions> {
     const room = this.rooms.get(payload.id);
     if (!room) {
       error = "Room doesn't exist";
-    } else if (user.room() !== null) {
-      error = 'Already in a room.';
     } else {
-      error = room.canJoin(user, payload.password);
+      error = room.join(user, payload.password);
     }
 
     if (typeof error === 'string') {
       user.send(M.sJoinRoomFailed({ reason: error }));
       return;
     }
-
-    user.join(room!);
   };
   cLeaveRoom: Handler<NT.ClientLeaveRoom> = (_, user) => {
-    user.part();
+    user.room()?.part(user);
   };
   cKickUser: Handler<NT.ClientKickUser> = (payload, user) => {
-    user.roomAdmin((room) => this.users.get(payload.userId)?.kickFrom(room));
+    user.room()?.kick(user, this.users.get(payload.userId));
   };
   cBanUser: Handler<NT.ClientBanUser> = (payload, user) => {
-    user.roomAdmin((room) => this.users.get(payload.userId)?.banFrom(room));
+    user.room()?.kick(user, this.users.get(payload.userId));
   };
   cReadyState: Handler<NT.ClientReadyState> = (payload, user) => {
     user.updateReadyState(payload);
   };
   cStartRun: Handler<NT.ClientStartRun> = (payload, user) => {
-    user.roomAdmin((room) => room.startRun(payload));
+    user.room()?.startRun(user, payload);
   };
   cRequestRoomList: Handler<NT.ClientRequestRoomList> = (payload, user) => {
     const rooms: RoomUpdate[] = [];
@@ -122,6 +164,6 @@ export class LobbyState implements Handlers<LobbyActions> {
     );
   };
   cRunOver: Handler<NT.ClientRunOver> = (payload, user) => {
-    user.roomAdmin((room) => room.runOver(payload));
+    user.room()?.finishRun(user, payload);
   };
 }

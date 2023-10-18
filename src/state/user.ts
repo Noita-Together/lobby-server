@@ -1,10 +1,13 @@
 import { Message } from '@bufbuild/protobuf';
+import { M } from '../util';
 
 import { WebSocket } from 'uWebsockets.js';
-import { ClientAuth } from '../runtypes/client_auth';
 import { RoomState } from './room';
 import * as NT from '../gen/messages_pb';
 import { LobbyState } from './lobby';
+
+import Debug from 'debug';
+const debug = Debug('nt:user');
 
 export interface IUser {
   readonly id: string;
@@ -14,19 +17,23 @@ export interface IUser {
 export class UserState implements IUser {
   public readonly id: string;
   public readonly name: string;
-  public readonly uaccess: number = 0;
+  public readonly uaccess: number;
 
-  private socket: WebSocket<ClientAuth>;
-  private currentRoom: RoomState | null = null;
+  // rooms can hang on to a UserState reference even if the user is disconnected. writing to
+  // a stale websocket is an error, so we store a UserState with no socket as this.socket = null
+  private socket: WebSocket<unknown> | null;
+  private lobby: LobbyState;
+  private currentRoom: RoomState | null;
   private readyState: NT.ClientReadyState;
 
-  constructor(socket: WebSocket<ClientAuth>) {
+  constructor(lobby: LobbyState, { id, name }: { id: string; name: string }, socket: WebSocket<unknown>) {
+    this.id = id;
+    this.name = name;
+    this.uaccess = 0;
+
     this.socket = socket;
-
-    const user = socket.getUserData();
-
-    this.id = user.sub;
-    this.name = user.preferred_username;
+    this.lobby = lobby;
+    this.currentRoom = null;
     this.readyState = new NT.ClientReadyState();
   }
 
@@ -38,57 +45,57 @@ export class UserState implements IUser {
     return this.readyState.ready;
   }
 
-  send(message: Uint8Array | Message<any>): number {
-    return this.socket.send(message instanceof Uint8Array ? message : message.toBinary(), true, false);
+  send(message: Uint8Array | Message<any>) {
+    this.socket?.send(message instanceof Uint8Array ? message : message.toBinary(), true, false);
   }
 
   updateReadyState(payload: NT.ClientReadyState) {
+    debug(this.id, this.name, 'readystate updated', {
+      ready: payload.ready,
+      seed: payload.seed,
+      mods: payload.mods?.length,
+    });
     this.readyState = payload;
   }
 
-  join(room: RoomState) {
+  joined(room: RoomState) {
     this.currentRoom = room;
-    this.socket.subscribe(room.topic);
-    room.joined(this); // after subscribe, so the user can receive the room status messages
+    this.socket?.subscribe(room.topic);
+
+    this.send(M.sJoinRoomSuccess(room.getState({ withUsers: true, withPassword: true })));
+    // COMPATIBILITY: how does NT app deal with receiving (possibly empty) flags?
+    // it _should_ keep its defaults and make no changes, but PB handling has proven
+    // incorrect in protobufjs
+    this.send(room.getFlags());
   }
 
-  part() {
-    if (!this.currentRoom) return;
+  parted(room: RoomState) {
+    this.socket?.unsubscribe(room.topic);
+    this.currentRoom = null;
 
-    this.socket.unsubscribe(this.currentRoom.topic);
-    this.currentRoom.parted(this);
+    // from old code:
+    // this.position = { x: 0, y: 0 }
+    // this.cacheReady = null
+    // this.modCheck = null
+    // this.room = null
   }
 
-  kickFrom(room: RoomState) {
-    this.socket.unsubscribe(room.topic);
-    room.parted(this);
+  disconnected() {
+    debug(this.id, this.name, 'disconnected');
+    this.socket = null;
   }
-
-  banFrom(room: RoomState) {
-    this.socket.unsubscribe(room.topic);
-    room.banned(this);
+  connected(ws: WebSocket<unknown>) {
+    debug(this.id, this.name, 'connected');
+    this.socket = ws;
   }
+  reconnected(ws: WebSocket<unknown>) {
+    debug(this.id, this.name, 'reconnected');
+    this.connected(ws);
 
-  roomAdmin(cb: (room: RoomState) => string | void, getMessage?: (reason: string) => Message<any>): void {
-    if (!this.currentRoom) {
-      if (getMessage) this.send(getMessage("Room doesn't exist."));
-      return;
-    }
-
-    if (this.currentRoom.owner !== this) {
-      if (getMessage) this.send(getMessage("Can't do that."));
-      return;
-    }
-
-    const error = cb(this.currentRoom);
-    if (error && getMessage) this.send(getMessage(error));
-  }
-
-  init(lobby: LobbyState) {
-    this.socket.subscribe(lobby.topic);
+    // TODO: send this user their room status
   }
 
   destroy() {
-    this.currentRoom?.disconnected(this);
+    this.socket = null;
   }
 }
