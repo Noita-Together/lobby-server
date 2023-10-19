@@ -1,4 +1,4 @@
-import UWS from 'uWebsockets.js';
+import uWS, { WebSocket } from 'uWebsockets.js';
 
 import * as NT from './gen/messages_pb';
 import { ClientAuth } from './runtypes/client_auth';
@@ -20,15 +20,16 @@ const WS_HOST = '0.0.0.0';
 const WS_PORT = 4444;
 const WS_PATH = '/ws';
 
-const users = new WeakMap<UWS.WebSocket<ClientAuth>, UserState>();
+const users = new WeakMap<uWS.WebSocket<ClientAuth>, UserState>();
 const app = WS_SECURE
-  ? UWS.SSLApp({
+  ? uWS.SSLApp({
       key_file_name: WS_KEY_FILE,
       cert_file_name: WS_CERT_FILE,
     })
-  : UWS.App();
+  : uWS.App();
 const publishers = BindPublishers(app);
 const lobby = new LobbyState(publishers);
+const sockets = new Set<WebSocket<unknown>>();
 
 app
   .ws<ClientAuth>(`${WS_PATH}/:token`, {
@@ -71,10 +72,12 @@ app
         });
     },
     open: (ws) => {
+      sockets.add(ws);
       const user = lobby.userConnected(ws);
       users.set(ws, user);
     },
     close: (ws, code, message) => {
+      sockets.delete(ws);
       const user = users.get(ws);
       if (!user) {
         console.error('BUG: userState not present in weakmap');
@@ -121,4 +124,18 @@ app
   })
   .listen(WS_HOST, WS_PORT, (token) => {
     console.log(`Listening on ${WS_SECURE ? 'wss' : 'ws'}://${WS_HOST}:${WS_PORT}${WS_PATH}`, token);
+
+    let count = 0;
+    const shutdown = () => {
+      if (count++ > 0) {
+        console.log('Forcibly terminating');
+        process.exit(1);
+      } else {
+        console.log('Shutting down');
+      }
+      uWS.us_listen_socket_close(token);
+      sockets.forEach((socket) => socket.close());
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   });
