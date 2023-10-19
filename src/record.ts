@@ -50,9 +50,9 @@ export const recordUnsubscribe = (userid: string, topic: string, ret: boolean) =
   actions.push(['unsubscribe', tick, userid, topic, ret]);
 };
 
-process.on('SIGINT', () => {
-  for (const [idx, action] of actions.entries()) {
-    console.log('/*' + ('0' + idx).slice(-2) + '*/  ' + JSON.stringify(action) + ',');
-  }
-  process.exit();
-});
+// process.on('SIGINT', () => {
+//   for (const [idx, action] of actions.entries()) {
+//     console.log('/*' + ('0' + idx).slice(-2) + '*/  ' + JSON.stringify(action) + ',');
+//   }
+//   process.exit();
+// });
