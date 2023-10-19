@@ -3,12 +3,17 @@ import { Value } from '@sinclair/typebox/value';
 
 import { ClientAuth } from './runtypes/client_auth';
 
-const SECRET_ACCESS = 'cvr9yvg!UQP7gfk7ycq';
-const SECRET_REFRESH = 'yhq!ZCM!kdf*twc5qnx';
+const JWT_SECRET = process.env.JWT_SECRET ?? null;
+const JWT_REFRESH = process.env.JWT_REFRESH ?? null;
+
+if (!JWT_SECRET || !JWT_REFRESH) {
+  console.error('JWT_SECRET and JWT_REFRESH are required environment variables');
+  process.exit(1);
+}
 
 export const verifyToken = (token: string): Promise<ClientAuth> =>
   new Promise((resolve, reject) => {
-    jwt.verify(token, SECRET_ACCESS, (err, decoded: unknown) => {
+    jwt.verify(token, JWT_SECRET, (err, decoded: unknown) => {
       if (err) {
         reject(new Error(`JWT verification failed: ${err.message}`));
         return;
