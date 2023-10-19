@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { Value } from '@sinclair/typebox/value';
+
 import { ClientAuth } from './runtypes/client_auth';
 
 const SECRET_ACCESS = 'cvr9yvg!UQP7gfk7ycq';

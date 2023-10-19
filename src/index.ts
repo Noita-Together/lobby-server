@@ -1,11 +1,13 @@
 import UWS from 'uWebsockets.js';
-import * as NT from './gen/messages_pb';
 
-import { verifyToken } from './jwt';
+import * as NT from './gen/messages_pb';
 import { ClientAuth } from './runtypes/client_auth';
 import { LobbyState } from './state/lobby';
 import { UserState } from './state/user';
+
+import { verifyToken } from './jwt';
 import { BindPublishers } from './util';
+// import { recordReceive } from './record';
 
 import Debug from 'debug';
 const debug = Debug('nt');
@@ -86,6 +88,8 @@ app
         return;
       }
 
+      // recordReceive(user.id, message);
+
       const msg = NT.Envelope.fromBinary(new Uint8Array(message));
 
       const { case: actionType, value: actionPayload } = msg.kind;
@@ -94,10 +98,17 @@ app
       const { case: action, value: payload } = actionPayload.action;
       if (!action || !payload) return; // empty "action"
 
+      let method: any;
       switch (actionType) {
         case 'lobbyAction':
-          const method = (lobby as any)[action];
-          if (typeof method === 'function') method.call(lobby, payload, user);
+          method = (lobby as any)[action];
+          break;
+      }
+
+      try {
+        if (typeof method === 'function') method.call(lobby, payload, user);
+      } catch (e) {
+        debug('Caught error from handler', actionType, action, e);
       }
     },
   })

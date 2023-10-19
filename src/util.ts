@@ -1,9 +1,15 @@
 import { TemplatedApp } from 'uWebsockets.js';
-import { IUser } from './state/user';
-import { AnyMessage, Message, PartialMessage, PlainMessage } from '@bufbuild/protobuf';
-import { Envelope, GameAction, LobbyAction, ServerChat } from './gen/messages_pb';
+import { AnyMessage, PartialMessage, PlainMessage } from '@bufbuild/protobuf';
 import { v4 as uuidv4 } from 'uuid';
+
+import { Envelope, GameAction, LobbyAction } from './gen/messages_pb';
+import { IUser } from './state/user';
+
 import { GameActions, LobbyActions } from './types';
+// import { recordPublish } from './record';
+
+import Debug from 'debug';
+const debug = Debug('nt:util');
 
 type LobbyActionCreator = {
   [K in LobbyActions['case']]: (LobbyActions & { case: K })['value'];
@@ -52,7 +58,10 @@ for (const f of LobbyAction.fields.list()) {
 
 export const BindPublishers = (app: TemplatedApp) => {
   const publish = (topic: string, message: Uint8Array | Envelope) => {
-    app.publish(topic, message instanceof Uint8Array ? message : message.toBinary(), true, false);
+    // const env = message instanceof Uint8Array ? Envelope.fromBinary(message) : message;
+    // console.log('publish', topic, env.kind.case, env.kind.value?.action.case);
+    const ret = app.publish(topic, message instanceof Uint8Array ? message : message.toBinary(), true, false);
+    // recordPublish('app', topic, message, ret);
   };
 
   return {

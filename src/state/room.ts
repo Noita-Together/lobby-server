@@ -1,7 +1,4 @@
 import * as NT from '../gen/messages_pb';
-import { UserState } from './user';
-import { LobbyState, SYSTEM_USER } from './lobby';
-import { M } from '../util';
 import {
   CreateBigRoomOpts,
   CreateRoomOpts,
@@ -9,15 +6,16 @@ import {
   UpdateRoomOpts,
   validateRoomOpts,
 } from '../runtypes/room_opts';
+import { Publishers, M } from '../util';
 import { GameActions, Handler, Handlers } from '../types';
-import { Publishers } from '../util';
-import { ClientRoomFlagsUpdate, ClientRunOver, ClientStartRun, Envelope } from '../gen/messages_pb';
+
+import { UserState } from './user';
+import { LobbyState, SYSTEM_USER } from './lobby';
 
 import Debug from 'debug';
 const debug = Debug('nt:room');
 
 let id = 0;
-const emptyFlags = M.sRoomFlagsUpdated().toBinary();
 
 export type RoomUserUpdate = {
   userId: string;
@@ -34,14 +32,16 @@ export type RoomUpdate = {
   protected: boolean;
   locked: boolean;
   owner: string;
+  password: string; // lol. remove?
   users: RoomUserUpdate[];
-  password?: string; // lol. remove?
 };
 
 type RoomStateCreateOpts = CreateRoomOpts | CreateBigRoomOpts;
 type RoomStateUpdateOpts = UpdateRoomOpts | UpdateBigRoomOpts;
 
 export class RoomState implements Handlers<GameActions> {
+  private static readonly emptyFlags = M.sRoomFlagsUpdated().toBinary();
+
   private readonly lobby: LobbyState;
   private readonly chat: ReturnType<Publishers['chat']>;
   private readonly broadcast: ReturnType<Publishers['broadcast']>;
@@ -60,7 +60,7 @@ export class RoomState implements Handlers<GameActions> {
   private inProgress: boolean;
   private password?: string;
 
-  private lastFlags: Uint8Array = emptyFlags;
+  private lastFlags: Uint8Array;
 
   private constructor(
     lobby: LobbyState,
@@ -84,16 +84,29 @@ export class RoomState implements Handlers<GameActions> {
     this.locked = false;
     this.inProgress = false;
 
-    this.lastFlags = emptyFlags;
-
-    // TOOD: it'd be nicer if we can just send the user as a join message,
-    // instead of "magically" adding them to the list. however, the app
-    // expects any join to be a non-owner, so we have to fix that first
-    this.users.add(owner);
+    this.lastFlags = RoomState.emptyFlags;
   }
 
-  getState({ withUsers, withPassword }: { withUsers?: boolean; withPassword?: boolean } = {}): RoomUpdate {
-    const update: RoomUpdate = {
+  getUsers(): IterableIterator<UserState> {
+    return this.users.values();
+  }
+
+  private roomUpdateUserData(user: UserState) {
+    return {
+      userId: user.id,
+      name: user.name,
+      ready: user.isReady(),
+      owner: user === this.owner,
+    };
+  }
+
+  getState(): RoomUpdate {
+    // TODO: not all of these fields get used by every protobuf message. in particular,
+    // `password` is elided from most of the messages when being encoded. ideally, we
+    // wouldn't send password at all, ever, but the PB for create room confirmation
+    // currently expects it, so we'll keep it for now. to avoid needing to make changes
+    // to the NT app
+    return {
       id: this.id,
       name: this.name,
       gamemode: this.gamemode,
@@ -102,21 +115,9 @@ export class RoomState implements Handlers<GameActions> {
       protected: !!this.password,
       locked: this.locked,
       owner: this.owner.name,
-      users: [],
+      password: this.password ?? '',
+      users: [...this.users.values()].map((u) => this.roomUpdateUserData(u)),
     };
-    if (withPassword === true) update.password = this.password;
-
-    if (withUsers === true) {
-      for (const user of this.users.values()) {
-        update.users.push({
-          userId: user.id,
-          name: user.name,
-          ready: user.isReady(),
-          owner: user === this.owner,
-        });
-      }
-    }
-    return update;
   }
 
   static create(
@@ -124,21 +125,35 @@ export class RoomState implements Handlers<GameActions> {
     owner: UserState,
     _opts: RoomStateCreateOpts,
     publishers: Publishers,
-  ): RoomState | string {
+  ): RoomState | void {
     let opts: RoomStateCreateOpts | string;
+
     if (process.env.DEV_MODE === 'true' && owner.uaccess < 3) {
-      opts = 'Room creation is disabled at the moment, Server is in dev mode :)';
-    } else if (owner.room() !== null) {
-      opts = 'Already in a room.';
-    } else {
-      opts = validateRoomOpts(owner.uaccess > 1 ? CreateBigRoomOpts : CreateRoomOpts, _opts);
+      owner.send(M.sRoomCreateFailed({ reason: 'Room creation is disabled at the moment, Server is in dev mode :)' }));
+      return;
     }
 
-    if (typeof opts === 'string') return opts;
+    if (owner.room() !== null) {
+      // user owned another room. probably they reconnected. destroy old room.
+      owner.room()!.destroy();
+    }
+
+    opts = validateRoomOpts(owner.uaccess > 1 ? CreateBigRoomOpts : CreateRoomOpts, _opts);
+
+    if (typeof opts === 'string') {
+      owner.send(M.sRoomCreateFailed({ reason: opts }));
+      return;
+    }
 
     const room = new RoomState(lobby, owner, opts, publishers);
-
     debug(room.id, 'created');
+
+    room.users.add(owner);
+    owner.joined(room);
+
+    const roomData = room.getState();
+    owner.send(M.sRoomCreated(roomData));
+    lobby.broadcast(M.sRoomAddToList({ room: roomData }));
 
     return room;
   }
@@ -152,12 +167,7 @@ export class RoomState implements Handlers<GameActions> {
     if (typeof opts === 'string') return opts;
 
     if (debug.enabled) {
-      debug(this.id, 'updating options', {
-        name: `\`${this.name}\`->\`${_opts.name}\`->\`${opts.name}\``,
-        gamemode: `\`${this.gamemode}\`->\`${_opts.gamemode}\`->\`${opts.gamemode}\``,
-        maxUsers: `\`${this.maxUsers}\`->\`${_opts.maxUsers}\`->\`${opts.maxUsers}\``,
-        locked: `\`${this.locked}\`->\`${_opts.locked}\`->\`${opts.locked}\``,
-      });
+      debug(this.id, 'updating options', this.optsValue(_opts, opts));
     }
 
     if (opts.name) this.name = opts.name;
@@ -169,14 +179,18 @@ export class RoomState implements Handlers<GameActions> {
     this.broadcast(M.sRoomUpdated(opts));
   }
 
-  setFlags(actor: UserState, payload: ClientRoomFlagsUpdate): string | void {
+  setFlags(actor: UserState, payload: NT.ClientRoomFlagsUpdate): string | void {
     if (this.owner !== actor) return "Can't do that.";
 
-    // TODO: is this valid during a run?
+    debug(this.id, 'updating flags', payload.flags.map(this.flagValue));
 
-    debug(this.id, 'updating flags', payload);
+    // TODO: is this valid during a run?
     const flags = M.sRoomFlagsUpdated(payload).toBinary();
+
+    // store the last-known flags as an already-encoded buffer, since we'll be
+    // replaying it to people who join
     this.lastFlags = flags;
+
     this.broadcast(flags);
   }
 
@@ -184,7 +198,7 @@ export class RoomState implements Handlers<GameActions> {
     return this.lastFlags;
   }
 
-  startRun(actor: UserState, payload: ClientStartRun) {
+  startRun(actor: UserState, payload: NT.ClientStartRun) {
     // no error for this yet
     if (this.owner !== actor) return;
 
@@ -199,7 +213,7 @@ export class RoomState implements Handlers<GameActions> {
     // this.broadcast(M.sHostStart(payload));
   }
 
-  finishRun(actor: UserState, payload: ClientRunOver) {
+  finishRun(actor: UserState, payload: NT.ClientRunOver) {
     // no error for this yet
     if (this.owner !== actor) return;
 
@@ -210,31 +224,50 @@ export class RoomState implements Handlers<GameActions> {
     // TODO: reset "modCheck" and ready states
   }
 
-  join(user: UserState, password?: string): string | null {
-    if (user.room() !== null) return 'Already in a room.';
-    if (this.bannedUsers.has(user.id)) return 'Banned from this room.';
-    if (this.users.size >= this.maxUsers) return 'Room is full.';
-    if (this.password && this.password !== password) return 'Bad password.';
-    if (this.locked) return 'Room is locked.';
+  join(user: UserState, password?: string): void {
+    let reason: string | null = null;
+    const room = user.room();
 
+    if (!room) {
+      // user isn't in any room, do the usual checks
+      if (this.bannedUsers.has(user.id)) reason = 'Banned from this room.';
+      else if (this.users.size >= this.maxUsers) reason = 'Room is full.';
+      else if (this.password && this.password !== password) reason = 'Bad password.';
+      else if (this.locked) reason = 'Room is locked.';
+    } else if (room !== this) {
+      // user got disconnected while in a room, but is trying to join a different
+      // room. remove them from their previous room.
+
+      if (room.owner === user) {
+        room.destroy();
+      } else {
+        user.parted(room);
+      }
+    } else {
+      // user got disconnected while in a room, and is rejoining it. allow them in
+    }
+
+    if (reason) {
+      user.send(M.sJoinRoomFailed({ reason }));
+      return;
+    }
+
+    debug(this.id, 'user joining', user.id, user.name);
     this.users.add(user);
 
     // broadcast the join to everyone except the user that joined
     // that user will receive a different confirmation in `user.joined`
-    this.broadcast(
+    user.broadcast(
+      this.topic,
       M.sUserJoinedRoom({
         userId: user.id,
         name: user.name,
       }),
     );
-
     user.joined(this);
-
-    debug(this.id, 'user joined', user.id, user.name);
-    return null;
   }
 
-  private removeUser<T extends (...args: any) => Envelope>(
+  private removeUser<T extends (...args: any) => NT.Envelope>(
     actor: UserState | null,
     target: UserState | undefined,
     pb: T,
@@ -256,8 +289,16 @@ export class RoomState implements Handlers<GameActions> {
       // when the owner leaves the room, destroy it
       this.destroy();
     } else {
+      // otherwise, remove user from room and notify everybody
       this.users.delete(target);
+
+      // update leaving user state and subscriptions before sending the chat update
+      target.parted(this);
+
+      // send the control message confirming the removal
       this.broadcast(pb({ userId: target.id }));
+
+      // send a chat message to the room
       this.chat(SYSTEM_USER, `${target.name} ${message}.`);
     }
 
@@ -280,15 +321,23 @@ export class RoomState implements Handlers<GameActions> {
     // no error for this one either if invalid
     if (this.owner !== actor) return;
 
+    // must send this message before calling this.destroy() - otherwise,
+    // the users will have been unsubscribed from the topic and will not
+    // receive the message
+    this.broadcast(M.sRoomDeleted({ id: this.id }));
+
     this.destroy();
     debug(this.id, 'deleted');
   }
 
-  private destroy() {
+  destroy() {
     for (const user of this.users) {
+      // uWS _says_ that ordering of sends and unsubscribes is guaranteed, but if
+      // we broadcast to the topic and then unsubscribe, the client does not appear
+      // to be receiving the message.
       user.parted(this);
-      this.users.delete(user);
     }
+    this.users.clear();
 
     this.lobby.roomDestroyed(this);
   }
@@ -315,4 +364,38 @@ export class RoomState implements Handlers<GameActions> {
   cCustomModEvent: Handler<NT.ClientCustomModEvent> = (payload, user) => {};
   cRespawnPenalty: Handler<NT.ClientRespawnPenalty> = (payload, user) => {};
   cAngerySteve: Handler<NT.ClientAngerySteve> = (payload, user) => {};
+
+  //// helpers ////
+  private flagValue = (flag: NT.ClientRoomFlagsUpdate_GameFlag) => {
+    // TODO: the NT app weirdly/incorrectly uses _optionality_ of flag message fields to signal
+    // whether they are enabled or disabled. improving this requires a change to the app itself.
+    // since we are unable to determine the expected type of a flag, we must currently rely on
+    // assumptions about how the app behaves:
+    // - the app only sends numeric or boolean flags
+    // - numbers are set in the "uIntVal" field
+    // - booleans are true if present, false if absent
+    if (flag.uIntVal !== undefined) {
+      return `${flag.flag}=${flag.uIntVal ?? 0}`;
+    } else {
+      return `${flag.flag}=true`;
+    }
+  };
+
+  private static readonly validProps = new Set<string>(Object.keys(CreateRoomOpts.properties));
+  private static readonly sym_unknown: unique symbol = Symbol('unknown');
+  private optsValue = (received: Partial<CreateRoomOpts>, validated: Partial<CreateRoomOpts>) => {
+    const res: any = {};
+    const unknown: string[] = [];
+    for (const key of Object.keys(validated) as (keyof CreateRoomOpts)[]) {
+      if (validated[key] === undefined) continue;
+
+      if (RoomState.validProps.has(key)) {
+        res[key] = [this[key], received[key], validated[key]];
+      } else {
+        unknown.push(key);
+      }
+    }
+    if (unknown.length > 0) res[RoomState.sym_unknown] = unknown;
+    return res;
+  };
 }

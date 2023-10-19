@@ -1,4 +1,4 @@
-import { Static, Type as T, TSchema } from '@sinclair/typebox';
+import { Static, Type as T } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 // https://github.com/validatorjs/validator.js/blob/b958bd7d1026a434ad3bf90064d3dcb8b775f1a9/src/lib/isAscii.js#L7

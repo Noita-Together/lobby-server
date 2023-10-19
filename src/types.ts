@@ -1,9 +1,7 @@
-import UWS from 'uWebsockets.js';
-import * as NT from './gen/messages_pb';
-
 import type { Message } from '@bufbuild/protobuf';
+
+import * as NT from './gen/messages_pb';
 import type { UserState } from './state/user';
-import { ClientAuth } from './runtypes/client_auth';
 
 type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
 type Simplify<U> = { [K in keyof U]: U[K] } & unknown;

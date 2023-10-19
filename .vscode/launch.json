@@ -13,6 +13,10 @@
       "runtimeArgs": ["--nolazy", "-r", "ts-node/register/transpile-only"],
       "cwd": "${workspaceRoot}",
       "internalConsoleOptions": "openOnSessionStart",
+      "env": {
+        "DEBUG": "*"
+      },
+      "outputCapture": "std"
     }
   ]
 }
