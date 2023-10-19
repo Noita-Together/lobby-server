@@ -1,9 +1,9 @@
-import { TemplatedApp } from 'uWebsockets.js';
+import { TemplatedApp, WebSocket } from 'uWebsockets.js';
 import { AnyMessage, PartialMessage, PlainMessage } from '@bufbuild/protobuf';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Envelope, GameAction, LobbyAction } from './gen/messages_pb';
-import { IUser } from './state/user';
+import { IUser, UserState } from './state/user';
 
 import { GameActions, LobbyActions } from './types';
 // import { recordPublish } from './record';
@@ -57,16 +57,17 @@ for (const f of LobbyAction.fields.list()) {
 }
 
 export const BindPublishers = (app: TemplatedApp) => {
-  const publish = (topic: string, message: Uint8Array | Envelope) => {
+  const publish = (topic: string, message: Uint8Array | Envelope, target: TemplatedApp | WebSocket<unknown> = app) => {
     // const env = message instanceof Uint8Array ? Envelope.fromBinary(message) : message;
     // console.log('publish', topic, env.kind.case, env.kind.value?.action.case);
-    const ret = app.publish(topic, message instanceof Uint8Array ? message : message.toBinary(), true, false);
+    const ret = target.publish(topic, message instanceof Uint8Array ? message : message.toBinary(), true, false);
     // recordPublish('app', topic, message, ret);
   };
 
   return {
-    broadcast: (topic: string) => (message: Uint8Array | Envelope) => publish(topic, message),
-    chat: (topic: string) => (user: IUser, message: string) =>
+    broadcast: (topic: string) => (message: Uint8Array | Envelope, socket?: WebSocket<unknown>) =>
+      publish(topic, message, socket),
+    chat: (topic: string) => (user: IUser, message: string, socket?: WebSocket<unknown>) =>
       publish(
         topic,
         M.sChat({
@@ -75,8 +76,17 @@ export const BindPublishers = (app: TemplatedApp) => {
           name: user.name,
           message,
         }),
+        socket,
       ),
   };
 };
+
+export const chat = (user: IUser, message: string) =>
+  M.sChat({
+    id: uuidv4(),
+    userId: user.id,
+    name: user.name,
+    message,
+  });
 
 export type Publishers = ReturnType<typeof BindPublishers>;

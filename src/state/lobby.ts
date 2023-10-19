@@ -17,7 +17,6 @@ const debug = Debug('nt:lobby');
 export class LobbyState implements Handlers<LobbyActions> {
   private readonly publishers: Publishers;
   readonly broadcast: ReturnType<Publishers['broadcast']>;
-  readonly chat: ReturnType<Publishers['chat']>;
 
   readonly topic = 'lobby';
 
@@ -27,7 +26,6 @@ export class LobbyState implements Handlers<LobbyActions> {
   constructor(publishers: Publishers) {
     this.publishers = publishers;
     this.broadcast = publishers.broadcast(this.topic);
-    this.chat = publishers.chat(this.topic);
   }
 
   userConnected(ws: WebSocket<ClientAuth>): UserState {
@@ -172,6 +170,6 @@ export class LobbyState implements Handlers<LobbyActions> {
     );
   };
   cRunOver: Handler<NT.ClientRunOver> = (payload, user) => {
-    user.room()?.finishRun(user, payload);
+    user.room()?.finishRun(user);
   };
 }

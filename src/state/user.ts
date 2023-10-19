@@ -1,7 +1,7 @@
 import { WebSocket } from 'uWebsockets.js';
 
 import * as NT from '../gen/messages_pb';
-import { M } from '../util';
+import { M, Publishers } from '../util';
 // import { recordPublish, recordSend, recordSubscribe, recordUnsubscribe } from '../record';
 
 import { RoomState } from './room';
@@ -34,6 +34,14 @@ export class UserState implements IUser {
     this.socket = socket;
     this.currentRoom = null;
     this.readyState = new NT.ClientReadyState();
+  }
+
+  withSocket<
+    Arg extends unknown,
+    Args extends Arg[],
+    T extends (...args: [...Args, WebSocket<unknown> | undefined]) => any,
+  >(fn: T, ...args: Args) {
+    if (this.socket) fn(...args, this.socket);
   }
 
   room() {

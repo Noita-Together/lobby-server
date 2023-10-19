@@ -4,6 +4,7 @@ import * as NT from './gen/messages_pb';
 import { ClientAuth } from './runtypes/client_auth';
 import { LobbyState } from './state/lobby';
 import { UserState } from './state/user';
+import { RoomState } from './state/room';
 
 import { verifyToken } from './jwt';
 import { BindPublishers } from './util';
@@ -98,15 +99,21 @@ app
       const { case: action, value: payload } = actionPayload.action;
       if (!action || !payload) return; // empty "action"
 
-      let method: any;
+      let target: LobbyState | RoomState | null = null;
       switch (actionType) {
         case 'lobbyAction':
-          method = (lobby as any)[action];
+          target = lobby;
+          break;
+        case 'gameAction':
+          target = user.room();
           break;
       }
 
       try {
-        if (typeof method === 'function') method.call(lobby, payload, user);
+        if (target && action) {
+          const method = (target as any)[action];
+          if (typeof method === 'function') method.call(target, payload, user);
+        }
       } catch (e) {
         debug('Caught error from handler', actionType, action, e);
       }
