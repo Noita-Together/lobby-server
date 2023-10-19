@@ -16,8 +16,16 @@ RUN find 'node_modules/uWebsockets.js' -name '*.node' -not -name "$UWS_TARGET_LI
 
 FROM node:20-alpine
 
-WORKDIR /noita-together
+ARG UID=0
+ARG GID=0
+
 RUN apk --no-cache add gcompat
-COPY --from=build /src/ ./
+RUN [ $GID -gt 0 ] && [ $UID -gt 0 ] \
+    && addgroup -g $GID nginx \
+    && adduser -G nginx -u $UID -h /noita-together -s /usr/sbin/nologin -D nginx \
+    || true
+USER $UID:$GID
+WORKDIR /noita-together
+COPY --chown=$UID:$GID --from=build /src/ ./
 
 CMD ["node", "dist/index.js"]
