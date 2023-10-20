@@ -133,10 +133,10 @@ app.ws<ClientAuth>(`${WS_PATH}/:token`, {
 const listen_sockets: us_listen_socket[] = [];
 
 if (WS_UNIX_SOCKET) {
-  app.listen(WS_HOST, WS_PORT, (token) => {
+  app.listen_unix((token) => {
     console.log(`Listening on ${WS_SECURE ? 'wss' : 'ws'}://[unix:${WS_UNIX_SOCKET}]${WS_PATH}`, token);
     listen_sockets.push(token);
-  });
+  }, WS_UNIX_SOCKET);
 } else {
   app.listen(WS_HOST, WS_PORT, (token) => {
     console.log(`Listening on ${WS_SECURE ? 'wss' : 'ws'}://${WS_HOST}:${WS_PORT}${WS_PATH}`, token);
