@@ -13,12 +13,27 @@ const debug = Debug('nt:user');
 export interface IUser {
   readonly id: string;
   readonly name: string;
+
+  lastX: number;
+  lastY: number;
 }
+
+const uaccess = new Map<string, number>([
+  ['SkyeOfBreeze', 3],
+  ['kabbypls', 3],
+  ['DunkOrSlam', 3],
+  ['myndzi', 3],
+]);
+
+const distSquaredThreshold = 400 * 400;
 
 export class UserState implements IUser {
   public readonly id: string;
   public readonly name: string;
   public readonly uaccess: number;
+
+  public readonly lastX = 0;
+  public readonly lastY = 0;
 
   // rooms can hang on to a UserState reference even if the user is disconnected. writing to
   // a stale websocket is an error, so we store a UserState with no socket as this.socket = null
@@ -29,11 +44,24 @@ export class UserState implements IUser {
   constructor({ id, name }: { id: string; name: string }, socket: WebSocket<unknown>) {
     this.id = id;
     this.name = name;
-    this.uaccess = 0;
+    this.uaccess = uaccess.get(name) ?? 0;
 
     this.socket = socket;
     this.currentRoom = null;
     this.readyState = new NT.ClientReadyState();
+  }
+
+  setLast(x: number, y: number) {
+    (this as IUser).lastX = x;
+    (this as IUser).lastY = y;
+  }
+
+  isNear(other: UserState) {
+    return (other.lastX - this.lastX) ** 2 + (other.lastY - this.lastY) ** 2 < distSquaredThreshold;
+  }
+
+  mods(): string {
+    return JSON.stringify(this.readyState.mods) ?? '';
   }
 
   withSocket<
@@ -72,21 +100,28 @@ export class UserState implements IUser {
       seed: payload.seed,
       mods: payload.mods?.length,
     });
+
     this.readyState = payload;
+    if (this.currentRoom) this.currentRoom.onUserReadyStateChange(this, payload);
   }
 
   joined(room: RoomState) {
     this.currentRoom = room;
     const ret = this.socket?.subscribe(room.topic);
     // if (ret !== undefined) recordSubscribe(this.id, room.topic, ret);
-    this.send(M.sJoinRoomSuccess(room.getState()));
-    this.send(room.getFlags());
+    if (room.owner !== this) {
+      this.send(M.sJoinRoomSuccess(room.getState()));
+      this.send(room.getFlags());
+    }
   }
 
   parted(room: RoomState) {
     debug('unsubscribe', room.topic);
-    const ret = this.socket?.unsubscribe(room.topic);
-    // if (ret !== undefined) recordUnsubscribe(this.id, room.topic, ret);
+    setImmediate(() => {
+      // temp hax: unsubscribe after receiving broadcast messages
+      const ret = this.socket?.unsubscribe(room.topic);
+      // if (ret !== undefined) recordUnsubscribe(this.id, room.topic, ret);
+    });
     this.currentRoom = null;
 
     // TODO:
@@ -132,13 +167,14 @@ export class UserState implements IUser {
 
     // if (this.currentRoom) this.joined(this.currentRoom);
 
-    if (this.currentRoom) {
-      if (this.currentRoom.owner === this) {
-        this.currentRoom.destroy();
-      } else {
-        this.parted(this.currentRoom);
-      }
-    }
+    // temp hax: reproduce existing behavior (destroy current room on create)
+    // if (this.currentRoom) {
+    //   if (this.currentRoom.owner === this) {
+    //     this.currentRoom.destroy();
+    //   } else {
+    //     this.parted(this.currentRoom);
+    //   }
+    // }
   }
 
   destroy() {

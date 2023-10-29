@@ -8,8 +8,8 @@ import { Publishers, M } from '../util';
 import { IUser, UserState } from './user';
 import { RoomState } from './room';
 
-export const SYSTEM_USER: IUser = { id: '-1', name: '[SYSTEM]' };
-export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]' };
+export const SYSTEM_USER: IUser = { id: '-1', name: '[SYSTEM]', lastX: 0, lastY: 0 };
+export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]', lastX: 0, lastY: 0 };
 
 import Debug from 'debug';
 const debug = Debug('nt:lobby');
@@ -118,8 +118,15 @@ export class LobbyState implements Handlers<LobbyActions> {
   //// message handlers ////
 
   cRoomCreate: Handler<NT.ClientRoomCreate> = (payload, user) => {
+    const currentRoom = user.room();
+    if (currentRoom) {
+      if (currentRoom.owner === user) currentRoom.destroy();
+    }
     const room = RoomState.create(this, user, { ...payload, locked: false }, this.publishers);
-    if (room) this.rooms.set(room.id, room);
+    if (room) {
+      this.rooms.set(room.id, room);
+      user.broadcast(this.topic, M.sRoomAddToList({ room: room.getState() }));
+    }
   };
 
   cRoomDelete: Handler<NT.ClientRoomDelete> = (payload, user) => {
@@ -157,9 +164,11 @@ export class LobbyState implements Handlers<LobbyActions> {
   };
   cReadyState: Handler<NT.ClientReadyState> = (payload, user) => {
     user.updateReadyState(payload);
+    // user.broadcast(this.topic, M.sUserReadyState({ userId: user.id, ...payload }));
   };
   cStartRun: Handler<NT.ClientStartRun> = (payload, user) => {
     user.room()?.startRun(user, payload);
+    this.broadcast(M.sHostStart({ forced: false }));
   };
   cRequestRoomList: Handler<NT.ClientRequestRoomList> = (payload, user) => {
     user.send(

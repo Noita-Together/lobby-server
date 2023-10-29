@@ -13,7 +13,7 @@ if (!JWT_SECRET || !JWT_REFRESH) {
 
 export const verifyToken = (token: string): Promise<ClientAuth> =>
   new Promise((resolve, reject) => {
-    jwt.verify(token, JWT_SECRET, (err, decoded: unknown) => {
+    jwt.verify(token, JWT_SECRET, { ignoreExpiration: true }, (err, decoded: unknown) => {
       if (err) {
         reject(new Error(`JWT verification failed: ${err.message}`));
         return;

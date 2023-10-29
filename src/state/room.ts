@@ -14,6 +14,8 @@ import { LobbyState, SYSTEM_USER } from './lobby';
 
 import { PlayerPositions } from './game/player_positions';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import Debug from 'debug';
 const debug = Debug('nt:room');
 
@@ -56,6 +58,7 @@ export class RoomState implements Handlers<GameActions> {
 
   private users = new Set<UserState>();
   private bannedUsers = new Set<string>();
+  private lastMods = new WeakMap<UserState, string>();
 
   private name: string;
   private gamemode: number;
@@ -66,7 +69,7 @@ export class RoomState implements Handlers<GameActions> {
 
   private lastFlags: Uint8Array;
 
-  private playerPositions: PlayerPositions;
+  // private playerPositions: PlayerPositions;
 
   private constructor(
     lobby: LobbyState,
@@ -76,7 +79,9 @@ export class RoomState implements Handlers<GameActions> {
   ) {
     this.lobby = lobby;
 
-    this.id = `${id++}`;
+    // this.id = `${id++}`;
+    this.id = uuidv4();
+
     this.owner = owner;
     this.topic = `/room/${this.id}`;
 
@@ -91,7 +96,7 @@ export class RoomState implements Handlers<GameActions> {
 
     this.lastFlags = RoomState.emptyFlags;
 
-    this.playerPositions = new PlayerPositions(this.broadcast, 50);
+    // this.playerPositions = new PlayerPositions(this.broadcast, 50);
   }
 
   getUsers(): IterableIterator<UserState> {
@@ -152,6 +157,10 @@ export class RoomState implements Handlers<GameActions> {
       return;
     }
 
+    if (owner.uaccess === 0) {
+      opts.name = `${owner.name}'s room`;
+    }
+
     const room = new RoomState(lobby, owner, opts, publishers);
     debug(room.id, 'created');
 
@@ -160,17 +169,17 @@ export class RoomState implements Handlers<GameActions> {
 
     const roomData = room.getState();
     owner.send(M.sRoomCreated(roomData));
-    lobby.broadcast(M.sRoomAddToList({ room: roomData }));
+    // lobby.broadcast(M.sRoomAddToList({ room: roomData }));
 
-    room.playerPositions.updatePlayers(room.users);
-    room.playerPositions.push(
-      owner.id,
-      M.sPlayerPos({
-        userId: owner.id,
-        x: DESIGN_PLAYER_START_POS_X,
-        y: DESIGN_PLAYER_START_POS_Y,
-      }),
-    );
+    // room.playerPositions.updatePlayers(room.users);
+    // room.playerPositions.push(
+    //   owner.id,
+    //   M.sPlayerPos({
+    //     userId: owner.id,
+    //     x: DESIGN_PLAYER_START_POS_X,
+    //     y: DESIGN_PLAYER_START_POS_Y,
+    //   }),
+    // );
 
     return room;
   }
@@ -215,17 +224,32 @@ export class RoomState implements Handlers<GameActions> {
     return this.lastFlags;
   }
 
+  onUserReadyStateChange(actor: UserState, payload: NT.ClientReadyState) {
+    this.broadcast(M.sUserReadyState({ userId: actor.id, ...payload }));
+
+    if (this.inProgress && payload.ready) {
+      const lastMods = this.lastMods.get(actor);
+      if (lastMods !== actor.mods()) return;
+      actor.send(M.sHostStart({ forced: false }));
+    }
+  }
+
   startRun(actor: UserState, payload: NT.ClientStartRun) {
     // no error for this yet
     if (this.owner !== actor) return;
 
     debug(this.id, 'start run');
 
+    // store the mods that users had at the start of a run
+    for (const user of this.users) {
+      this.lastMods.set(user, user.mods());
+    }
+
     this.inProgress = true;
 
     // current server just sends this with {forced: false} even though
     // the message payload contains various things. imitating that for now
-    this.broadcast(M.sHostStart({ forced: false }));
+    // actor.broadcast(this.topic, M.sHostStart({ forced: false }));
 
     // this.broadcast(M.sHostStart(payload));
   }
@@ -283,15 +307,15 @@ export class RoomState implements Handlers<GameActions> {
     );
     user.joined(this);
 
-    this.playerPositions.updatePlayers(this.users);
-    this.playerPositions.push(
-      user.id,
-      M.sPlayerPos({
-        userId: user.id,
-        x: DESIGN_PLAYER_START_POS_X,
-        y: DESIGN_PLAYER_START_POS_Y,
-      }),
-    );
+    // this.playerPositions.updatePlayers(this.users);
+    // this.playerPositions.push(
+    //   user.id,
+    //   M.sPlayerPos({
+    //     userId: user.id,
+    //     x: DESIGN_PLAYER_START_POS_X,
+    //     y: DESIGN_PLAYER_START_POS_Y,
+    //   }),
+    // );
   }
 
   private removeUser<T extends (...args: any) => NT.Envelope>(
@@ -329,7 +353,7 @@ export class RoomState implements Handlers<GameActions> {
       this.broadcast(chat(SYSTEM_USER, `${target.name} ${message}.`));
     }
 
-    this.playerPositions.updatePlayers(this.users);
+    // this.playerPositions.updatePlayers(this.users);
     debug(this.id, 'user left', target.id, target.name, message);
   }
 
@@ -359,7 +383,7 @@ export class RoomState implements Handlers<GameActions> {
   }
 
   destroy() {
-    this.playerPositions.destroy();
+    // this.playerPositions.destroy();
 
     for (const user of this.users) {
       // uWS _says_ that ordering of sends and unsubscribes is guaranteed, but if
@@ -375,31 +399,47 @@ export class RoomState implements Handlers<GameActions> {
   //// message handlers ////
 
   cPlayerMove: Handler<NT.ClientPlayerMove> = (payload, user) => {
-    // NT app sends empty messages
+    if (!this.inProgress) return;
     if (payload.frames.length === 0) return;
 
-    // debug('cPlayerMove', payload.frames);
+    const { x, y } = payload.frames[payload.frames.length - 1];
+    if (x === undefined || y === undefined) return;
+    user.setLast(x, y);
 
-    const userId = user.id;
+    const small = M.sPlayerPos({ userId: user.id, x, y });
+    const big = M.sPlayerMove({ userId: user.id, ...payload });
 
-    // there's no real reason to include old frames as best I can determine,
-    // but we'll do it anyway. maybe some frames include position changes
-    // only and some frames include arm position only, etc.
-    //
-    // we're counting on the fact here that uWS will be _much_ more efficient
-    // in terms of broadcasting the data to users, and protobuf will be compact
-    // enough, that we're not really losing anything by sending a full update
-    // to everybody all at once. our strategy instead will be to send synchronized
-    // updates; that is, instead of sending one broadcast to all players every
-    // time one message is received, we collect updates and send the latest update
-    // every X time.
-    //
-    // TODO: the mod pushes a player state update every frame. the NT app passes
-    // this on to the lobby server as-is. the NT app should only really send the
-    // most recent update, because there's no reason we would want stale information
-    // and this will save on network bytes pushed across the internet
-    this.playerPositions.push(userId, M.sPlayerMove({ userId: user.id, ...payload }));
+    for (const u of this.users) {
+      if (user.isNear(u)) u.send(big);
+      else u.send(small);
+    }
   };
+  // cPlayerMove: Handler<NT.ClientPlayerMove> = (payload, user) => {
+  //   // NT app sends empty messages
+  //   if (payload.frames.length === 0) return;
+
+  //   // debug('cPlayerMove', payload.frames);
+
+  //   const userId = user.id;
+
+  //   // there's no real reason to include old frames as best I can determine,
+  //   // but we'll do it anyway. maybe some frames include position changes
+  //   // only and some frames include arm position only, etc.
+  //   //
+  //   // we're counting on the fact here that uWS will be _much_ more efficient
+  //   // in terms of broadcasting the data to users, and protobuf will be compact
+  //   // enough, that we're not really losing anything by sending a full update
+  //   // to everybody all at once. our strategy instead will be to send synchronized
+  //   // updates; that is, instead of sending one broadcast to all players every
+  //   // time one message is received, we collect updates and send the latest update
+  //   // every X time.
+  //   //
+  //   // TODO: the mod pushes a player state update every frame. the NT app passes
+  //   // this on to the lobby server as-is. the NT app should only really send the
+  //   // most recent update, because there's no reason we would want stale information
+  //   // and this will save on network bytes pushed across the internet
+  //   this.playerPositions.push(userId, M.sPlayerMove({ userId: user.id, ...payload }));
+  // };
   cPlayerUpdate: Handler<NT.ClientPlayerUpdate> = (payload, user) => {
     if (!this.inProgress) return;
     // { ignoreSelf: true }

@@ -11,7 +11,7 @@ export class PlayerPositions {
   private timer: NodeJS.Timeout;
 
   constructor(broadcast: (msg: Uint8Array) => void, interval: number) {
-    this.timer = setInterval(() => this.flush(broadcast), interval);
+    this.timer = setInterval(() => this.flush(broadcast), interval).unref();
   }
 
   updatePlayers(users: Set<UserState>) {

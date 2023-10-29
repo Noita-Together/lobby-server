@@ -125,7 +125,8 @@ app.ws<ClientAuth>(`${WS_PATH}/:token`, {
         if (typeof method === 'function') method.call(target, payload, user);
       }
     } catch (e) {
-      debug('Caught error from handler', actionType, action, e);
+      console.error('Caught error from handler', actionType, action, e);
+      // debug('Caught error from handler', actionType, action, e);
     }
   },
 });
