@@ -196,11 +196,11 @@ export class RoomState implements Handlers<GameActions> {
       debug(this.id, 'updating options', this.optsValue(_opts, opts));
     }
 
-    if (opts.name) this.name = opts.name;
-    if (opts.password) this.password = opts.password;
-    if (opts.gamemode) this.gamemode = opts.gamemode;
-    if (opts.maxUsers) this.maxUsers = opts.maxUsers;
-    if (opts.locked) this.locked = opts.locked;
+    if (opts.name !== undefined) this.name = opts.name;
+    if (opts.password !== undefined) this.password = opts.password;
+    if (opts.gamemode !== undefined) this.gamemode = opts.gamemode;
+    if (opts.maxUsers !== undefined) this.maxUsers = opts.maxUsers;
+    if (opts.locked !== undefined) this.locked = opts.locked;
 
     this.broadcast(M.sRoomUpdated(opts));
   }
