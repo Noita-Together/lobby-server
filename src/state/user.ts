@@ -109,10 +109,9 @@ export class UserState implements IUser {
     this.currentRoom = room;
     const ret = this.socket?.subscribe(room.topic);
     // if (ret !== undefined) recordSubscribe(this.id, room.topic, ret);
-    if (room.owner !== this) {
-      this.send(M.sJoinRoomSuccess(room.getState()));
-      this.send(room.getFlags());
-    }
+
+    this.send(M.sJoinRoomSuccess(room.getState()));
+    this.send(room.getFlags());
   }
 
   parted(room: RoomState) {
