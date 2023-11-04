@@ -146,7 +146,7 @@ export class LobbyState implements Handlers<LobbyActions> {
   cJoinRoom: Handler<NT.ClientJoinRoom> = (payload, user) => {
     const room = this.rooms.get(payload.id);
     if (!room) {
-      user.send(M.sJoinRoomFailed({ reason: "Room doesn't exist" }));
+      user.send(M.sJoinRoomFailed({ reason: "Room doesn't exist." }));
     } else {
       room.join(user, payload.password);
     }
@@ -168,7 +168,7 @@ export class LobbyState implements Handlers<LobbyActions> {
   };
   cStartRun: Handler<NT.ClientStartRun> = (payload, user) => {
     user.room()?.startRun(user, payload);
-    this.broadcast(M.sHostStart({ forced: false }));
+    // this.broadcast(M.sHostStart({ forced: false }));
   };
   cRequestRoomList: Handler<NT.ClientRequestRoomList> = (payload, user) => {
     user.send(

@@ -105,13 +105,19 @@ export class UserState implements IUser {
     if (this.currentRoom) this.currentRoom.onUserReadyStateChange(this, payload);
   }
 
-  joined(room: RoomState) {
+  joined(room: RoomState, wasCreate: boolean = false) {
     this.currentRoom = room;
     const ret = this.socket?.subscribe(room.topic);
     // if (ret !== undefined) recordSubscribe(this.id, room.topic, ret);
 
-    this.send(M.sJoinRoomSuccess(room.getState()));
-    this.send(room.getFlags());
+    if (!wasCreate) {
+      this.send(M.sJoinRoomSuccess(room.getState()));
+      this.send(room.getFlags());
+    }
+    for (const user of room.getUsers()) {
+      if (this === user) continue;
+      this.send(M.sUserReadyState({ userId: user.id, ...user.readyState }));
+    }
   }
 
   parted(room: RoomState) {
@@ -132,6 +138,9 @@ export class UserState implements IUser {
   }
 
   disconnected() {
+    if (this.currentRoom) {
+      this.currentRoom.part(this);
+    }
     debug(this.id, this.name, 'disconnected');
     this.socket = null;
   }

@@ -165,10 +165,11 @@ export class RoomState implements Handlers<GameActions> {
     debug(room.id, 'created');
 
     room.users.add(owner);
-    owner.joined(room);
 
     const roomData = room.getState();
     owner.send(M.sRoomCreated(roomData));
+
+    owner.joined(room, true);
     // lobby.broadcast(M.sRoomAddToList({ room: roomData }));
 
     // room.playerPositions.updatePlayers(room.users);
@@ -249,7 +250,7 @@ export class RoomState implements Handlers<GameActions> {
 
     // current server just sends this with {forced: false} even though
     // the message payload contains various things. imitating that for now
-    // actor.broadcast(this.topic, M.sHostStart({ forced: false }));
+    this.broadcast(M.sHostStart({ forced: false }));
 
     // this.broadcast(M.sHostStart(payload));
   }
