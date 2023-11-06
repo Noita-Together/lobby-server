@@ -7,7 +7,7 @@ import {
   validateRoomOpts,
 } from '../runtypes/room_opts';
 import { Publishers, M, chat } from '../util';
-import { createPlayerPosition, lastPlayerPosition, tagPlayerMove } from '../protoutil';
+import { tagPlayerMove } from '../protoutil';
 import { GameActions, Handler, Handlers } from '../types';
 
 import { UserState } from './user';
@@ -401,135 +401,65 @@ export class RoomState implements Handlers<GameActions> {
   playerMoveRaw(payload: Buffer, user: UserState) {
     if (!this.inProgress) return;
 
-    // const { x, y } = lastPlayerPosition(payload);
-
-    // // don't pass movement updates for the spawn/default 0,0 location
-    // if (x === 0 && y === 0) return;
-
-    // const smallUpdate = createPlayerPosition(x, y, user.playerIdBuf);
     const bigUpdate = tagPlayerMove(payload, user.playerIdBuf);
     if (!bigUpdate) return;
 
     user.broadcast(this.topic, new Uint8Array(bigUpdate));
-
-    // if smallUpdate is undefined, there were no frames in the payload
-    // if bigUpdate is undefined, someone was fooling around and supplied a userId from the client
-    // if (!smallUpdate || !bigUpdate) return;
-
-    // let lastFrame: Buffer|undefined = undefined;
-    // new ProtoHax(payload)
-    //   .each(playerFrame, phax => {
-    //     const tag = (playerFrame << 3) | 0x02;
-    //     const bytes = phax.Bytes();
-    //     const len = bytes.length; // assuming <= 127
-    //     lastFrame = Buffer.alloc(len+1+user.playerPositionId.length);
-    //     lastFrame[0] = tag;
-    //     lastFrame[1] = len;
-    //     bytes.copy(lastFrame, 2, 0);
-    //     user.playerPositionId.copy(lastFrame, 2+len, 0);
-    //   });
-
-    // if (payload.frames.length === 0) return;
-
-    // const { x, y } = payload.frames[payload.frames.length - 1];
-    // if (x === undefined || y === undefined) return;
-    // user.setLast(x, y);
-
-    // const small = M.sPlayerPos({ userId: user.id, x, y });
-    // const big = M.sPlayerMove({ userId: user.id, ...payload });
-
-    // let bigCount = 0;
-    // let smallCount = 0;
-    // for (const u of this.users) {
-    //   if (user.isNear(u)) {
-    //     u.send(bigUpdate);
-    //     bigCount++;
-    //   } else {
-    //     u.send(smallUpdate);
-    //     smallCount++;
-    //   }
-    // }
-    // console.log(`big=${bigCount} small=${smallCount}`);
   }
-  // cPlayerMove: Handler<NT.ClientPlayerMove> = (payload, user) => {
-  //   // NT app sends empty messages
-  //   if (payload.frames.length === 0) return;
 
-  //   // debug('cPlayerMove', payload.frames);
-
-  //   const userId = user.id;
-
-  //   // there's no real reason to include old frames as best I can determine,
-  //   // but we'll do it anyway. maybe some frames include position changes
-  //   // only and some frames include arm position only, etc.
-  //   //
-  //   // we're counting on the fact here that uWS will be _much_ more efficient
-  //   // in terms of broadcasting the data to users, and protobuf will be compact
-  //   // enough, that we're not really losing anything by sending a full update
-  //   // to everybody all at once. our strategy instead will be to send synchronized
-  //   // updates; that is, instead of sending one broadcast to all players every
-  //   // time one message is received, we collect updates and send the latest update
-  //   // every X time.
-  //   //
-  //   // TODO: the mod pushes a player state update every frame. the NT app passes
-  //   // this on to the lobby server as-is. the NT app should only really send the
-  //   // most recent update, because there's no reason we would want stale information
-  //   // and this will save on network bytes pushed across the internet
-  //   this.playerPositions.push(userId, M.sPlayerMove({ userId: user.id, ...payload }));
-  // };
-  cPlayerUpdate: Handler<NT.ClientPlayerUpdate> = (payload, user) => {
+  cPlayerUpdate(payload: NT.ClientPlayerUpdate, user: UserState) {
     if (!this.inProgress) return;
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sPlayerUpdate({ userId: user.id, ...payload }));
-  };
-  cPlayerUpdateInventory: Handler<NT.ClientPlayerUpdateInventory> = (payload, user) => {
+  }
+  cPlayerUpdateInventory(payload: NT.ClientPlayerUpdateInventory, user: UserState) {
     // not implemented in current server
-  };
-  cHostItemBank: Handler<NT.ClientHostItemBank> = (payload, user) => {
+  }
+  cHostItemBank(payload: NT.ClientHostItemBank, user: UserState) {
     if (!this.inProgress) return;
 
     // { ownerOnly: true }
     if (this.owner !== user) return;
 
     this.broadcast(M.sHostItemBank(payload));
-  };
-  cHostUserTake: Handler<NT.ClientHostUserTake> = (payload, user) => {
+  }
+  cHostUserTake(payload: NT.ClientHostUserTake, user: UserState) {
     if (!this.inProgress) return;
 
     // { ownerOnly: true }
     if (this.owner !== user) return;
 
     this.broadcast(M.sHostUserTake(payload));
-  };
-  cHostUserTakeGold: Handler<NT.ClientHostUserTakeGold> = (payload, user) => {
+  }
+  cHostUserTakeGold(payload: NT.ClientHostUserTakeGold, user: UserState) {
     if (!this.inProgress) return;
 
     // { ownerOnly: true }
     if (this.owner !== user) return;
 
     this.broadcast(M.sHostUserTakeGold(payload));
-  };
-  cPlayerAddGold: Handler<NT.ClientPlayerAddGold> = (payload, { id: userId }) => {
+  }
+  cPlayerAddGold(payload: NT.ClientPlayerAddGold, { id: userId }: UserState) {
     if (!this.inProgress) return;
     this.broadcast(M.sPlayerAddGold({ userId, ...payload }));
-  };
-  cPlayerTakeGold: Handler<NT.ClientPlayerTakeGold> = (payload, { id: userId }) => {
+  }
+  cPlayerTakeGold(payload: NT.ClientPlayerTakeGold, { id: userId }: UserState) {
     if (!this.inProgress) return;
 
     // { toHost: true }
     this.owner.send(M.sPlayerTakeGold({ userId, ...payload }));
-  };
-  cPlayerAddItem: Handler<NT.ClientPlayerAddItem> = (payload, { id: userId }) => {
+  }
+  cPlayerAddItem(payload: NT.ClientPlayerAddItem, { id: userId }: UserState) {
     if (!this.inProgress) return;
     this.broadcast(M.sPlayerAddItem({ userId, ...payload }));
-  };
-  cPlayerTakeItem: Handler<NT.ClientPlayerTakeItem> = (payload, { id: userId }) => {
+  }
+  cPlayerTakeItem(payload: NT.ClientPlayerTakeItem, { id: userId }: UserState) {
     if (!this.inProgress) return;
 
     // { toHost: true }
     this.owner.send(M.sPlayerTakeItem({ userId, ...payload }));
-  };
-  cPlayerPickup: Handler<NT.ClientPlayerPickup> = (payload, user) => {
+  }
+  cPlayerPickup(payload: NT.ClientPlayerPickup, user: UserState) {
     if (!this.inProgress) return;
 
     // { ignoreSelf: true }
@@ -543,32 +473,32 @@ export class RoomState implements Handlers<GameActions> {
     //     break;
     //   }
     // }
-  };
-  cNemesisAbility: Handler<NT.ClientNemesisAbility> = (payload, user) => {
+  }
+  cNemesisAbility(payload: NT.ClientNemesisAbility, user: UserState) {
     if (!this.inProgress) return;
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sNemesisAbility({ userId: user.id, ...payload }));
-  };
-  cNemesisPickupItem: Handler<NT.ClientNemesisPickupItem> = (payload, user) => {
+  }
+  cNemesisPickupItem(payload: NT.ClientNemesisPickupItem, user: UserState) {
     if (!this.inProgress) return;
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sNemesisPickupItem({ userId: user.id, ...payload }));
-  };
-  cPlayerNewGamePlus: Handler<NT.ClientPlayerNewGamePlus> = (payload, user) => {
+  }
+  cPlayerNewGamePlus(payload: NT.ClientPlayerNewGamePlus, user: UserState) {
     if (!this.inProgress) return;
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sPlayerNewGamePlus({ userId: user.id, ...payload }));
-  };
-  cPlayerSecretHourglass: Handler<NT.ClientPlayerSecretHourglass> = (payload, user) => {
+  }
+  cPlayerSecretHourglass(payload: NT.ClientPlayerSecretHourglass, user: UserState) {
     if (!this.inProgress) return;
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sPlayerSecretHourglass({ userId: user.id, ...payload }));
-  };
-  cCustomModEvent: Handler<NT.ClientCustomModEvent> = (payload, { id: userId }) => {
+  }
+  cCustomModEvent(payload: NT.ClientCustomModEvent, { id: userId }: UserState) {
     if (!this.inProgress) return;
     // in the original source:
     // {
@@ -578,9 +508,9 @@ export class RoomState implements Handlers<GameActions> {
     // but `payload` is a string, so these would always be undefined?
     // if it's parsed as json, i don't see where that is happening
     this.broadcast(M.sCustomModEvent({ userId, ...payload }));
-  };
+  }
   // cCustomModHostEvent - implemented in original, but doesn't seem to be referenced, and has no proto message
-  cAngerySteve: Handler<NT.ClientAngerySteve> = (payload, user) => {
+  cAngerySteve(payload: NT.ClientAngerySteve, user: UserState) {
     if (!this.inProgress) return;
     // if (this.gamemode === 0) { // coop
     //   // stats stuff
@@ -588,8 +518,8 @@ export class RoomState implements Handlers<GameActions> {
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sAngerySteve({ userId: user.id, ...payload }));
-  };
-  cRespawnPenalty: Handler<NT.ClientRespawnPenalty> = (payload, user) => {
+  }
+  cRespawnPenalty(payload: NT.ClientRespawnPenalty, user: UserState) {
     if (!this.inProgress) return;
     // if (this.gamemode === 0) { // coop
     //   // stats stuff
@@ -597,8 +527,8 @@ export class RoomState implements Handlers<GameActions> {
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sRespawnPenalty({ userId: user.id, ...payload }));
-  };
-  cPlayerDeath: Handler<NT.ClientPlayerDeath> = (payload, user) => {
+  }
+  cPlayerDeath(payload: NT.ClientPlayerDeath, user: UserState) {
     if (!this.inProgress) return;
     // if (this.gamemode === 0) { // coop
     //   // stats stuff
@@ -606,8 +536,8 @@ export class RoomState implements Handlers<GameActions> {
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sPlayerDeath({ userId: user.id, ...payload }));
-  };
-  cChat: Handler<NT.ClientChat> = (payload, user) => {
+  }
+  cChat(payload: NT.ClientChat, user: UserState) {
     const msg = payload.message ?? '';
     if (this.owner === user && msg.startsWith('/')) {
       switch (msg.toLowerCase()) {
@@ -618,7 +548,7 @@ export class RoomState implements Handlers<GameActions> {
       return;
     }
     if (msg) user.withSocket(this.broadcast, chat(user, msg));
-  };
+  }
   // cPlayerEmote - implemented in original, but doesn't seem to be referenced, and has no proto message
 
   //// helpers ////

@@ -2,7 +2,7 @@ import { WebSocket } from 'uWebsockets.js';
 
 import * as NT from '../gen/messages_pb';
 import { ClientAuth } from '../runtypes/client_auth';
-import { Handler, Handlers, LobbyActions } from '../types';
+import { Handlers, LobbyActions } from '../types';
 import { Publishers, M } from '../util';
 
 import { IUser, UserState } from './user';
@@ -117,7 +117,7 @@ export class LobbyState implements Handlers<LobbyActions> {
 
   //// message handlers ////
 
-  cRoomCreate: Handler<NT.ClientRoomCreate> = (payload, user) => {
+  cRoomCreate(payload: NT.ClientRoomCreate, user: UserState) {
     const currentRoom = user.room();
     if (currentRoom) {
       if (currentRoom.owner === user) currentRoom.destroy();
@@ -127,58 +127,58 @@ export class LobbyState implements Handlers<LobbyActions> {
       this.rooms.set(room.id, room);
       user.broadcast(this.topic, M.sRoomAddToList({ room: room.getState() }));
     }
-  };
+  }
 
-  cRoomDelete: Handler<NT.ClientRoomDelete> = (payload, user) => {
+  cRoomDelete(payload: NT.ClientRoomDelete, user: UserState) {
     user.room()?.delete(user);
-  };
+  }
 
-  cRoomUpdate: Handler<NT.ClientRoomUpdate> = (payload, user) => {
+  cRoomUpdate(payload: NT.ClientRoomUpdate, user: UserState) {
     const reason = user.room()?.update(user, payload);
     if (reason) user.send(M.sRoomUpdateFailed({ reason }));
-  };
+  }
 
-  cRoomFlagsUpdate: Handler<NT.ClientRoomFlagsUpdate> = (payload, user) => {
+  cRoomFlagsUpdate(payload: NT.ClientRoomFlagsUpdate, user: UserState) {
     const reason = user.room()?.setFlags(user, payload);
     if (reason) user.send(M.sRoomFlagsUpdateFailed({ reason }));
-  };
+  }
 
-  cJoinRoom: Handler<NT.ClientJoinRoom> = (payload, user) => {
+  cJoinRoom(payload: NT.ClientJoinRoom, user: UserState) {
     const room = this.rooms.get(payload.id);
     if (!room) {
       user.send(M.sJoinRoomFailed({ reason: "Room doesn't exist." }));
     } else {
       room.join(user, payload.password);
     }
-  };
-  cLeaveRoom: Handler<NT.ClientLeaveRoom> = (_, user) => {
+  }
+  cLeaveRoom(_: NT.ClientLeaveRoom, user: UserState) {
     // when the room owner leaves the room, a cRoomDelete message is sent
     // _instead of_ cLeaveRoom
     user.room()?.part(user);
-  };
-  cKickUser: Handler<NT.ClientKickUser> = (payload, user) => {
+  }
+  cKickUser(payload: NT.ClientKickUser, user: UserState) {
     user.room()?.kick(user, this.users.get(payload.userId));
-  };
-  cBanUser: Handler<NT.ClientBanUser> = (payload, user) => {
+  }
+  cBanUser(payload: NT.ClientBanUser, user: UserState) {
     user.room()?.kick(user, this.users.get(payload.userId));
-  };
-  cReadyState: Handler<NT.ClientReadyState> = (payload, user) => {
+  }
+  cReadyState(payload: NT.ClientReadyState, user: UserState) {
     user.updateReadyState(payload);
     // user.broadcast(this.topic, M.sUserReadyState({ userId: user.id, ...payload }));
-  };
-  cStartRun: Handler<NT.ClientStartRun> = (payload, user) => {
+  }
+  cStartRun(payload: NT.ClientStartRun, user: UserState) {
     user.room()?.startRun(user, payload);
     // this.broadcast(M.sHostStart({ forced: false }));
-  };
-  cRequestRoomList: Handler<NT.ClientRequestRoomList> = (payload, user) => {
+  }
+  cRequestRoomList(payload: NT.ClientRequestRoomList, user: UserState) {
     user.send(
       M.sRoomList({
         pages: 0, // not implemented
         rooms: [...this.rooms.values()].map((room) => room.getState()),
       }),
     );
-  };
-  cRunOver: Handler<NT.ClientRunOver> = (payload, user) => {
+  }
+  cRunOver(payload: NT.ClientRunOver, user: UserState) {
     user.room()?.finishRun(user);
-  };
+  }
 }
