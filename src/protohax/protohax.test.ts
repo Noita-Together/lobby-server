@@ -98,7 +98,7 @@ describe('ProtoHax', () => {
       const pbes_encoded = Buffer.from(
         new Message({
           [key]: n,
-        }).toBinary()
+        }).toBinary(),
       );
 
       const fieldId = Message.fields.findJsonName(key)?.no;
@@ -136,7 +136,7 @@ describe('ProtoHax', () => {
       const phax = new ProtoHax(pbes_encoded);
 
       let actual: number[] = [];
-      phax.if(fieldId!, phax => {
+      phax.if(fieldId!, (phax) => {
         while (!phax.atEnd()) {
           actual.push(phax.Int32());
         }
@@ -179,7 +179,7 @@ describe('ProtoHax', () => {
             singleBool: true,
           },
           repeatedMessage: [{ singleEnum: Enum.ONE }, { singleEnum: Enum.TWO }],
-        }).toBinary()
+        }).toBinary(),
       );
 
       const lMessage = Message.fields.findJsonName('lMessage')?.no;
@@ -198,16 +198,60 @@ describe('ProtoHax', () => {
         new ProtoHax(pbes_encoded) //
           .with(lMessage!)
           .with(singleBool!)
-          .Bool()
+          .Bool(),
       );
 
       new ProtoHax(pbes_encoded) //
-        .each(repeatedMessage!, phax => actual.push(phax.with(singleEnum!).Enum()));
+        .each(repeatedMessage!, (phax) => actual.push(phax.with(singleEnum!).Enum()));
 
       expect(actual).toEqual(expected);
     });
   });
 
+  describe('if', () => {
+    it('finds the first value', () => {
+      const expected = 1;
+      const pbes_encoded = Buffer.from(new Message({ singleInt32: expected }).toBinary());
+
+      const fieldId = Message.fields.findJsonName('singleInt32')?.no;
+      expect(fieldId).not.toBeUndefined();
+
+      let found = false;
+      const actual = new ProtoHax(pbes_encoded).if(fieldId!, () => {
+        found = true;
+      });
+      expect(found).toEqual(true);
+    });
+    it('does nothing on no match', () => {
+      const expected = 1;
+      const pbes_encoded = Buffer.from(new Message({ singleInt32: expected }).toBinary());
+
+      const fieldId = Message.fields.findJsonName('singleBool')?.no;
+      expect(fieldId).not.toBeUndefined();
+
+      let found = false;
+      const actual = new ProtoHax(pbes_encoded).if(fieldId!, () => {
+        found = true;
+      });
+      expect(found).toEqual(false);
+    });
+    it('bugfix: incorrect usage of last', () => {
+      // explanation: `if` did not check this.ok after calling seek, so it attempted to call skip
+      // with arbitrary / unrelated data in the last-read value property. this caused an exception
+      // when the last-read value indicated a group wiretype ("not implemented").
+      // TODO: this.seek could return a boolean directly indicating whether it terminates an operation
+      const pbes_encoded = Buffer.from(new Message({ singleString: 'hi there11' }).toBinary());
+
+      const fieldId = Message.fields.findJsonName('singleInt32')?.no;
+      expect(fieldId).not.toBeUndefined();
+
+      let found = false;
+      new ProtoHax(pbes_encoded).if(fieldId!, () => {
+        found = true;
+      });
+      expect(found).toEqual(false);
+    });
+  });
   describe('each', () => {
     it('reads scalars', () => {
       const expected = [1, 2, 3];
@@ -219,7 +263,7 @@ describe('ProtoHax', () => {
       const phax = new ProtoHax(pbes_encoded);
 
       let actual: number[] = [];
-      phax.each(fieldId!, phax => actual.push(phax.Int32()));
+      phax.each(fieldId!, (phax) => actual.push(phax.Int32()));
       expect(actual).toEqual(expected);
     });
     it('reads strings', () => {
@@ -232,12 +276,12 @@ describe('ProtoHax', () => {
       const phax = new ProtoHax(pbes_encoded);
 
       const actual: string[] = [];
-      phax.each(fieldId!, phax => actual.push(phax.String()));
+      phax.each(fieldId!, (phax) => actual.push(phax.String()));
 
       expect(expected).toEqual(actual);
     });
     it('reads bytes', () => {
-      const expected = ['a', 'b'].map(s => Buffer.from(s));
+      const expected = ['a', 'b'].map((s) => Buffer.from(s));
       const pbes_encoded = Buffer.from(new Message({ repeatedBytes: expected }).toBinary());
 
       const fieldId = Message.fields.findJsonName('repeatedBytes')?.no;
@@ -246,7 +290,7 @@ describe('ProtoHax', () => {
       const phax = new ProtoHax(pbes_encoded);
 
       const actual: Buffer[] = [];
-      phax.each(fieldId!, phax => actual.push(phax.Bytes()));
+      phax.each(fieldId!, (phax) => actual.push(phax.Bytes()));
 
       expect(expected).toEqual(actual);
     });
@@ -278,10 +322,10 @@ describe('ProtoHax', () => {
           repeatedBytes: [Buffer.from('hi')],
           repeatedMessage: [new Message({ singleDouble: 1 })],
           unpackedInt32: [1],
-        }).toBinary()
+        }).toBinary(),
       );
       const phax = new ProtoHax(pbes_encoded);
-      phax.if(1337, phax => {
+      phax.if(1337, (phax) => {
         throw new Error('should not be called');
       });
     });

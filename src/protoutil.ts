@@ -43,7 +43,7 @@ export const tagPlayerMove = (rawPlayerMove: Buffer, pmId: Buffer): Buffer | und
   // write GameAction tag+length
   buf[pos++] = (gameActionId << 3) | Wiretype.LEN;
   if (gameActionHeaderSize === 2) {
-    buf[pos++] = msgLength;
+    buf[pos++] = gameActionPayloadSize;
   } else {
     buf[pos++] = (gameActionPayloadSize & 0x7f) | 0x80;
     buf[pos++] = (gameActionPayloadSize >>> 7) & 0x7f;
@@ -52,7 +52,7 @@ export const tagPlayerMove = (rawPlayerMove: Buffer, pmId: Buffer): Buffer | und
   // write PlayerMove tag+length
   buf[pos++] = (playerMoveId << 3) | Wiretype.LEN;
   if (playerMoveHeaderSize === 2) {
-    buf[pos++] = msgLength - pos;
+    buf[pos++] = playerMovePayloadSize;
   } else {
     buf[pos++] = (playerMovePayloadSize & 0x7f) | 0x80;
     buf[pos++] = (playerMovePayloadSize >>> 7) & 0x7f;

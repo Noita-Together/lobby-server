@@ -109,7 +109,7 @@ app.ws<ClientAuth>(`${WS_PATH}/:token`, {
 
     // optimized message handling for player move updates
     const buf = Buffer.from(message);
-    let playerMovePayload = maybePlayerMove(buf);
+    const playerMovePayload = maybePlayerMove(buf);
 
     if (playerMovePayload) {
       user.room()?.playerMoveRaw(playerMovePayload, user);

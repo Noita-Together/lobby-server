@@ -1,9 +1,6 @@
 import { PlainMessage } from '@bufbuild/protobuf';
-import { Envelope, GameAction } from './gen/messages_pb';
+import { Envelope } from './gen/messages_pb';
 import { createPlayerPosition, lastPlayerPosition, maybePlayerMove, tagPlayerMove } from './protoutil';
-
-const gameActionId = Envelope.fields.findJsonName('gameAction')!.no;
-const playerMoveId = GameAction.fields.findJsonName('playerMove')!.no;
 
 const asSingle = (v: number) => {
   const buf = Buffer.alloc(4);
@@ -74,6 +71,27 @@ describe('createPlayerPosition', () => {
 });
 
 describe('PlayerMove userId tagging', () => {
+  it('works with empty frames', () => {
+    const buf = Buffer.from('0a020a00', 'hex');
+    const mpm = maybePlayerMove(buf);
+    expect(mpm).toBeDefined();
+    const tagged = tagPlayerMove(mpm!, Buffer.from('foo'));
+    expect(tagged).toBeDefined();
+    expect(Envelope.fromBinary(tagged!)).toEqual({
+      kind: {
+        case: 'gameAction',
+        value: {
+          action: {
+            case: 'playerMove',
+            value: {
+              userId: 'foo',
+              frames: [],
+            },
+          },
+        },
+      },
+    });
+  });
   it('works as expected', () => {
     const frame = { x: 1.3, y: -1.3, anim: 1, armR: 0.872, armScaleY: 1, held: 1, scaleX: 1 };
     const mangledFrame = {

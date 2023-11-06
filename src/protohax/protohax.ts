@@ -342,6 +342,7 @@ export class ProtoHax {
   if(fieldId: number, cb: (phax: ProtoHax) => void): ProtoHax {
     if (!this.ok) return this;
     this.seek(fieldId);
+    if (!this.ok) return this;
     var size = this.size();
     var val;
     if (size > 0) {
