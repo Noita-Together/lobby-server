@@ -46,6 +46,9 @@ const gameAction = Envelope.fields.findJsonName('gameAction')!.no;
 const playerMove = GameAction.fields.findJsonName('playerMove')!.no;
 
 app.ws<ClientAuth>(`${WS_PATH}/:token`, {
+  idleTimeout: 120,
+  sendPingsAutomatically: true,
+  maxLifetime: 0,
   upgrade: (res, req, ctx) => {
     const ip = req.getHeader('x-forwarded-for') || Buffer.from(res.getRemoteAddressAsText()).toString();
     debug(ip, 'upgrade request');
