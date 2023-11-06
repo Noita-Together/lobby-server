@@ -7,12 +7,11 @@ import {
   validateRoomOpts,
 } from '../runtypes/room_opts';
 import { Publishers, M, chat } from '../util';
+import { createPlayerPosition, lastPlayerPosition, tagPlayerMove } from '../protoutil';
 import { GameActions, Handler, Handlers } from '../types';
 
 import { UserState } from './user';
 import { LobbyState, SYSTEM_USER } from './lobby';
-
-import { PlayerPositions } from './game/player_positions';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -399,22 +398,59 @@ export class RoomState implements Handlers<GameActions> {
 
   //// message handlers ////
 
-  cPlayerMove: Handler<NT.ClientPlayerMove> = (payload, user) => {
+  playerMoveRaw(payload: Buffer, user: UserState) {
     if (!this.inProgress) return;
-    if (payload.frames.length === 0) return;
 
-    const { x, y } = payload.frames[payload.frames.length - 1];
-    if (x === undefined || y === undefined) return;
-    user.setLast(x, y);
+    // const { x, y } = lastPlayerPosition(payload);
 
-    const small = M.sPlayerPos({ userId: user.id, x, y });
-    const big = M.sPlayerMove({ userId: user.id, ...payload });
+    // // don't pass movement updates for the spawn/default 0,0 location
+    // if (x === 0 && y === 0) return;
 
-    for (const u of this.users) {
-      if (user.isNear(u)) u.send(big);
-      else u.send(small);
-    }
-  };
+    // const smallUpdate = createPlayerPosition(x, y, user.playerIdBuf);
+    const bigUpdate = tagPlayerMove(payload, user.playerIdBuf);
+    if (!bigUpdate) return;
+
+    user.broadcast(this.topic, new Uint8Array(bigUpdate));
+
+    // if smallUpdate is undefined, there were no frames in the payload
+    // if bigUpdate is undefined, someone was fooling around and supplied a userId from the client
+    // if (!smallUpdate || !bigUpdate) return;
+
+    // let lastFrame: Buffer|undefined = undefined;
+    // new ProtoHax(payload)
+    //   .each(playerFrame, phax => {
+    //     const tag = (playerFrame << 3) | 0x02;
+    //     const bytes = phax.Bytes();
+    //     const len = bytes.length; // assuming <= 127
+    //     lastFrame = Buffer.alloc(len+1+user.playerPositionId.length);
+    //     lastFrame[0] = tag;
+    //     lastFrame[1] = len;
+    //     bytes.copy(lastFrame, 2, 0);
+    //     user.playerPositionId.copy(lastFrame, 2+len, 0);
+    //   });
+
+    // if (payload.frames.length === 0) return;
+
+    // const { x, y } = payload.frames[payload.frames.length - 1];
+    // if (x === undefined || y === undefined) return;
+    // user.setLast(x, y);
+
+    // const small = M.sPlayerPos({ userId: user.id, x, y });
+    // const big = M.sPlayerMove({ userId: user.id, ...payload });
+
+    // let bigCount = 0;
+    // let smallCount = 0;
+    // for (const u of this.users) {
+    //   if (user.isNear(u)) {
+    //     u.send(bigUpdate);
+    //     bigCount++;
+    //   } else {
+    //     u.send(smallUpdate);
+    //     smallCount++;
+    //   }
+    // }
+    // console.log(`big=${bigCount} small=${smallCount}`);
+  }
   // cPlayerMove: Handler<NT.ClientPlayerMove> = (payload, user) => {
   //   // NT app sends empty messages
   //   if (payload.frames.length === 0) return;

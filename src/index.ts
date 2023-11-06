@@ -9,8 +9,11 @@ import { RoomState } from './state/room';
 import { verifyToken } from './jwt';
 import { BindPublishers } from './util';
 // import { recordReceive } from './record';
+import { ProtoHax } from './protohax/protohax';
+import { Envelope, GameAction } from './gen/messages_pb';
 
 import Debug from 'debug';
+import { maybePlayerMove } from './protoutil';
 const debug = Debug('nt');
 
 const asNumber = (v: unknown, dflt: number): number => {
@@ -38,6 +41,9 @@ const app = WS_SECURE
 const publishers = BindPublishers(app);
 const lobby = new LobbyState(publishers);
 const sockets = new Set<WebSocket<unknown>>();
+
+const gameAction = Envelope.fields.findJsonName('gameAction')!.no;
+const playerMove = GameAction.fields.findJsonName('playerMove')!.no;
 
 app.ws<ClientAuth>(`${WS_PATH}/:token`, {
   upgrade: (res, req, ctx) => {
@@ -101,7 +107,19 @@ app.ws<ClientAuth>(`${WS_PATH}/:token`, {
 
     // recordReceive(user.id, message);
 
-    const msg = NT.Envelope.fromBinary(new Uint8Array(message));
+    // optimized message handling for player move updates
+    const buf = Buffer.from(message);
+    let playerMovePayload = maybePlayerMove(buf);
+
+    if (playerMovePayload) {
+      user.room()?.playerMoveRaw(playerMovePayload, user);
+      return;
+    }
+
+    // fall back to proper decode/encode for everything else
+    const msg = NT.Envelope.fromBinary(buf);
+
+    // debug(user.name, msg.kind.case, msg.kind.value?.action.case);
 
     const { case: actionType, value: actionPayload } = msg.kind;
     if (!actionType || !actionPayload) return; // empty "kind"

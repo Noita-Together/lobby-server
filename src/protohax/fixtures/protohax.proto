@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+// message    := (tag value)*
+// 
+// tag        := (field << 3) bit-or wire_type;
+//                 encoded as uint32 varint
+// value      := varint      for wire_type == VARINT,
+//               i32         for wire_type == I32,
+//               i64         for wire_type == I64,
+//               len-prefix  for wire_type == LEN,
+//               <empty>     for wire_type == SGROUP or EGROUP
+// 
+// varint     := int32 | int64 | uint32 | uint64 | bool | enum | sint32 | sint64;
+//                 encoded as varints (sintN are ZigZag-encoded first)
+// i32        := sfixed32 | fixed32 | float;
+//                 encoded as 4-byte little-endian;
+//                 memcpy of the equivalent C types (u?int32_t, float)
+// i64        := sfixed64 | fixed64 | double;
+//                 encoded as 8-byte little-endian;
+//                 memcpy of the equivalent C types (u?int64_t, double)
+// 
+// len-prefix := size (message | string | bytes | packed);
+//                 size encoded as int32 varint
+// string     := valid UTF-8 string (e.g. ASCII);
+//                 max 2GB of bytes
+// bytes      := any sequence of 8-bit bytes;
+//                 max 2GB of bytes
+// packed     := varint* | i32* | i64*,
+//                 consecutive values of the type specified in `.proto`
+
+enum Enum {
+  ENUM_UNSPECIFIED = 0;
+  ENUM_ONE = 1;
+  ENUM_TWO = 2;
+}
+
+message Message {
+  // low (single-byte tag)
+  Message l_message = 1;
+
+  // singular
+  int32    single_int32    = 11;
+  int64    single_int64    = 12;
+  uint32   single_uint32   = 13;
+  uint64   single_uint64   = 14;
+  sint32   single_sint32   = 15;
+  sint64   single_sint64   = 16;
+  bool     single_bool     = 17;
+  Enum     single_enum     = 18;
+  fixed64  single_fixed64  = 19;
+  sfixed64 single_sfixed64 = 20;
+  double   single_double   = 21;
+  string   single_string   = 22;
+  bytes    single_bytes    = 23;
+  fixed32  single_fixed32  = 24;
+  sfixed32 single_sfixed32 = 25;
+  float    single_float    = 26;
+  Message  single_message  = 27;
+
+  // repeated 
+  repeated int32    repeated_int32    = 111;
+  repeated string   repeated_string   = 122;
+  repeated bytes    repeated_bytes    = 123;
+  repeated Message  repeated_message  = 127;
+
+  // unpacked repeated
+  repeated   int32    unpacked_int32    = 211 [packed=false];
+}

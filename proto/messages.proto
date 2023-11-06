@@ -13,8 +13,8 @@ message GameAction {
         // The c prefix stands for "client", which refers to this application
         // The s prefix stands for "server", which refers to the online Noita game server
 
-        ClientPlayerMove c_player_move = 1;
-        ServerPlayerMove s_player_move = 2;
+        PlayerMove player_move = 1;
+        PlayerPosition player_position = 2;
 
         ClientPlayerUpdate c_player_update = 3;
         ServerPlayerUpdate s_player_update = 4;
@@ -73,7 +73,6 @@ message GameAction {
         ClientAngerySteve c_angery_steve = 39;
         ServerAngerySteve s_angery_steve = 40;
 
-        ServerPlayerPos s_player_pos = 41;
         ServerStatsUpdate s_stat_update = 42;
     }
 }
@@ -88,19 +87,16 @@ message PlayerFrame {
     optional int32 held = 7;
 }
 
-message ServerPlayerPos {
-    string user_id = 1;
-    float x = 2;
-    float y = 3;
+message PlayerMove {
+    repeated PlayerFrame frames = 1;
+
+    string user_id = 15;
 }
 
-message ClientPlayerMove {
-    repeated PlayerFrame frames = 1; 
-}
+message PlayerPosition {
+    PlayerFrame frame = 1;
 
-message ServerPlayerMove {
-    string user_id = 1;
-    repeated PlayerFrame frames = 2;
+    string user_id = 15;
 }
 
 message ClientPlayerUpdate {

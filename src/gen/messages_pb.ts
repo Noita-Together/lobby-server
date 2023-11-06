@@ -68,16 +68,16 @@ export class GameAction extends Message<GameAction> {
    */
   action: {
     /**
-     * @generated from field: NT.ClientPlayerMove c_player_move = 1;
+     * @generated from field: NT.PlayerMove player_move = 1;
      */
-    value: ClientPlayerMove;
-    case: "cPlayerMove";
+    value: PlayerMove;
+    case: "playerMove";
   } | {
     /**
-     * @generated from field: NT.ServerPlayerMove s_player_move = 2;
+     * @generated from field: NT.PlayerPosition player_position = 2;
      */
-    value: ServerPlayerMove;
-    case: "sPlayerMove";
+    value: PlayerPosition;
+    case: "playerPosition";
   } | {
     /**
      * @generated from field: NT.ClientPlayerUpdate c_player_update = 3;
@@ -308,12 +308,6 @@ export class GameAction extends Message<GameAction> {
     case: "sAngerySteve";
   } | {
     /**
-     * @generated from field: NT.ServerPlayerPos s_player_pos = 41;
-     */
-    value: ServerPlayerPos;
-    case: "sPlayerPos";
-  } | {
-    /**
      * @generated from field: NT.ServerStatsUpdate s_stat_update = 42;
      */
     value: ServerStatsUpdate;
@@ -328,8 +322,8 @@ export class GameAction extends Message<GameAction> {
   static readonly runtime: typeof proto3 = proto3;
   static readonly typeName = "NT.GameAction";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "c_player_move", kind: "message", T: ClientPlayerMove, oneof: "action" },
-    { no: 2, name: "s_player_move", kind: "message", T: ServerPlayerMove, oneof: "action" },
+    { no: 1, name: "player_move", kind: "message", T: PlayerMove, oneof: "action" },
+    { no: 2, name: "player_position", kind: "message", T: PlayerPosition, oneof: "action" },
     { no: 3, name: "c_player_update", kind: "message", T: ClientPlayerUpdate, oneof: "action" },
     { no: 4, name: "s_player_update", kind: "message", T: ServerPlayerUpdate, oneof: "action" },
     { no: 5, name: "c_player_update_inventory", kind: "message", T: ClientPlayerUpdateInventory, oneof: "action" },
@@ -368,7 +362,6 @@ export class GameAction extends Message<GameAction> {
     { no: 38, name: "s_respawn_penalty", kind: "message", T: ServerRespawnPenalty, oneof: "action" },
     { no: 39, name: "c_angery_steve", kind: "message", T: ClientAngerySteve, oneof: "action" },
     { no: 40, name: "s_angery_steve", kind: "message", T: ServerAngerySteve, oneof: "action" },
-    { no: 41, name: "s_player_pos", kind: "message", T: ServerPlayerPos, oneof: "action" },
     { no: 42, name: "s_stat_update", kind: "message", T: ServerStatsUpdate, oneof: "action" },
   ]);
 
@@ -463,131 +456,88 @@ export class PlayerFrame extends Message<PlayerFrame> {
 }
 
 /**
- * @generated from message NT.ServerPlayerPos
+ * @generated from message NT.PlayerMove
  */
-export class ServerPlayerPos extends Message<ServerPlayerPos> {
-  /**
-   * @generated from field: string user_id = 1;
-   */
-  userId = "";
-
-  /**
-   * @generated from field: float x = 2;
-   */
-  x = 0;
-
-  /**
-   * @generated from field: float y = 3;
-   */
-  y = 0;
-
-  constructor(data?: PartialMessage<ServerPlayerPos>) {
-    super();
-    proto3.util.initPartial(data, this);
-  }
-
-  static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "NT.ServerPlayerPos";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "user_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "x", kind: "scalar", T: 2 /* ScalarType.FLOAT */ },
-    { no: 3, name: "y", kind: "scalar", T: 2 /* ScalarType.FLOAT */ },
-  ]);
-
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ServerPlayerPos {
-    return new ServerPlayerPos().fromBinary(bytes, options);
-  }
-
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ServerPlayerPos {
-    return new ServerPlayerPos().fromJson(jsonValue, options);
-  }
-
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ServerPlayerPos {
-    return new ServerPlayerPos().fromJsonString(jsonString, options);
-  }
-
-  static equals(a: ServerPlayerPos | PlainMessage<ServerPlayerPos> | undefined, b: ServerPlayerPos | PlainMessage<ServerPlayerPos> | undefined): boolean {
-    return proto3.util.equals(ServerPlayerPos, a, b);
-  }
-}
-
-/**
- * @generated from message NT.ClientPlayerMove
- */
-export class ClientPlayerMove extends Message<ClientPlayerMove> {
+export class PlayerMove extends Message<PlayerMove> {
   /**
    * @generated from field: repeated NT.PlayerFrame frames = 1;
    */
   frames: PlayerFrame[] = [];
 
-  constructor(data?: PartialMessage<ClientPlayerMove>) {
+  /**
+   * @generated from field: string user_id = 15;
+   */
+  userId = "";
+
+  constructor(data?: PartialMessage<PlayerMove>) {
     super();
     proto3.util.initPartial(data, this);
   }
 
   static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "NT.ClientPlayerMove";
+  static readonly typeName = "NT.PlayerMove";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "frames", kind: "message", T: PlayerFrame, repeated: true },
+    { no: 15, name: "user_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ClientPlayerMove {
-    return new ClientPlayerMove().fromBinary(bytes, options);
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PlayerMove {
+    return new PlayerMove().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ClientPlayerMove {
-    return new ClientPlayerMove().fromJson(jsonValue, options);
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): PlayerMove {
+    return new PlayerMove().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ClientPlayerMove {
-    return new ClientPlayerMove().fromJsonString(jsonString, options);
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): PlayerMove {
+    return new PlayerMove().fromJsonString(jsonString, options);
   }
 
-  static equals(a: ClientPlayerMove | PlainMessage<ClientPlayerMove> | undefined, b: ClientPlayerMove | PlainMessage<ClientPlayerMove> | undefined): boolean {
-    return proto3.util.equals(ClientPlayerMove, a, b);
+  static equals(a: PlayerMove | PlainMessage<PlayerMove> | undefined, b: PlayerMove | PlainMessage<PlayerMove> | undefined): boolean {
+    return proto3.util.equals(PlayerMove, a, b);
   }
 }
 
 /**
- * @generated from message NT.ServerPlayerMove
+ * @generated from message NT.PlayerPosition
  */
-export class ServerPlayerMove extends Message<ServerPlayerMove> {
+export class PlayerPosition extends Message<PlayerPosition> {
   /**
-   * @generated from field: string user_id = 1;
+   * @generated from field: NT.PlayerFrame frame = 1;
+   */
+  frame?: PlayerFrame;
+
+  /**
+   * @generated from field: string user_id = 15;
    */
   userId = "";
 
-  /**
-   * @generated from field: repeated NT.PlayerFrame frames = 2;
-   */
-  frames: PlayerFrame[] = [];
-
-  constructor(data?: PartialMessage<ServerPlayerMove>) {
+  constructor(data?: PartialMessage<PlayerPosition>) {
     super();
     proto3.util.initPartial(data, this);
   }
 
   static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "NT.ServerPlayerMove";
+  static readonly typeName = "NT.PlayerPosition";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "user_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "frames", kind: "message", T: PlayerFrame, repeated: true },
+    { no: 1, name: "frame", kind: "message", T: PlayerFrame },
+    { no: 15, name: "user_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ServerPlayerMove {
-    return new ServerPlayerMove().fromBinary(bytes, options);
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PlayerPosition {
+    return new PlayerPosition().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ServerPlayerMove {
-    return new ServerPlayerMove().fromJson(jsonValue, options);
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): PlayerPosition {
+    return new PlayerPosition().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ServerPlayerMove {
-    return new ServerPlayerMove().fromJsonString(jsonString, options);
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): PlayerPosition {
+    return new PlayerPosition().fromJsonString(jsonString, options);
   }
 
-  static equals(a: ServerPlayerMove | PlainMessage<ServerPlayerMove> | undefined, b: ServerPlayerMove | PlainMessage<ServerPlayerMove> | undefined): boolean {
-    return proto3.util.equals(ServerPlayerMove, a, b);
+  static equals(a: PlayerPosition | PlainMessage<PlayerPosition> | undefined, b: PlayerPosition | PlainMessage<PlayerPosition> | undefined): boolean {
+    return proto3.util.equals(PlayerPosition, a, b);
   }
 }
 

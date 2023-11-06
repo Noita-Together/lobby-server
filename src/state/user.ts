@@ -41,6 +41,8 @@ export class UserState implements IUser {
   private currentRoom: RoomState | null;
   private readyState: NT.ClientReadyState;
 
+  readonly playerIdBuf: Buffer; // just don't modify this
+
   constructor({ id, name }: { id: string; name: string }, socket: WebSocket<unknown>) {
     this.id = id;
     this.name = name;
@@ -49,6 +51,8 @@ export class UserState implements IUser {
     this.socket = socket;
     this.currentRoom = null;
     this.readyState = new NT.ClientReadyState();
+
+    this.playerIdBuf = Buffer.from(id);
   }
 
   setLast(x: number, y: number) {

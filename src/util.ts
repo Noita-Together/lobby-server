@@ -2,8 +2,8 @@ import { TemplatedApp, WebSocket } from 'uWebsockets.js';
 import { AnyMessage, PartialMessage, PlainMessage } from '@bufbuild/protobuf';
 import { v4 as uuidv4 } from 'uuid';
 
+import { IUser } from './state/user';
 import { Envelope, GameAction, LobbyAction } from './gen/messages_pb';
-import { IUser, UserState } from './state/user';
 
 import { GameActions, LobbyActions } from './types';
 // import { recordPublish } from './record';
