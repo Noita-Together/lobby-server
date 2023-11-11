@@ -72,6 +72,7 @@ app.ws<ClientAuth>(`${WS_PATH}/:token`, {
   idleTimeout: 120,
   sendPingsAutomatically: true,
   maxLifetime: 0,
+  maxPayloadLength: 16 * 1024 * 1024,
   upgrade: handleUpgrade,
   open: handleOpen,
   close: handleClose,
