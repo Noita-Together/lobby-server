@@ -1,8 +1,6 @@
-import { WebSocket } from 'uWebsockets.js';
-
 import * as NT from '../gen/messages_pb';
-import { ClientAuth } from '../runtypes/client_auth';
 import { Handlers, LobbyActions } from '../types';
+import { ClientAuthWebSocket } from '../ws_handlers';
 import { Publishers, M } from '../util';
 
 import { IUser, UserState } from './user';
@@ -14,6 +12,9 @@ export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]', lastX: 0,
 import Debug from 'debug';
 const debug = Debug('nt:lobby');
 
+type Simplify<T> = { [K in keyof T]: T[K] } & unknown;
+type createRoomParams = Simplify<Omit<Parameters<typeof RoomState.create>[0], 'roomId'>>;
+
 export class LobbyState implements Handlers<LobbyActions> {
   private readonly publishers: Publishers;
   readonly broadcast: ReturnType<Publishers['broadcast']>;
@@ -23,12 +24,16 @@ export class LobbyState implements Handlers<LobbyActions> {
   private rooms = new Map<string, RoomState>();
   private users = new Map<string, UserState>();
 
-  constructor(publishers: Publishers) {
+  constructor(
+    publishers: Publishers,
+    private createRoomId?: () => string,
+    private createChatId?: () => string,
+  ) {
     this.publishers = publishers;
     this.broadcast = publishers.broadcast(this.topic);
   }
 
-  userConnected(ws: WebSocket<ClientAuth>): UserState {
+  userConnected(ws: ClientAuthWebSocket): UserState {
     // rooms retain a reference to the UserState of their owner and any users present in the room.
     // if the user gets disconnected, we don't want to destroy the room (and possibly kick everybody
     // out if it was the host that disconnected) -- we want them to be able to reconnect and pick up
@@ -115,14 +120,27 @@ export class LobbyState implements Handlers<LobbyActions> {
     this.rooms.delete(room.id);
   }
 
+  private createRoom(params: createRoomParams): RoomState | void {
+    return RoomState.create({
+      ...params,
+      ...(this.createRoomId ? { roomId: this.createRoomId() } : {}),
+      ...(this.createChatId ? { createChatId: this.createChatId } : {}),
+    });
+  }
+
   //// message handlers ////
 
   cRoomCreate(payload: NT.ClientRoomCreate, user: UserState) {
-    const currentRoom = user.room();
-    if (currentRoom) {
-      if (currentRoom.owner === user) currentRoom.destroy();
-    }
-    const room = RoomState.create(this, user, { ...payload, locked: false }, this.publishers);
+    const room = this.createRoom({
+      lobby: this,
+      owner: user,
+      opts: {
+        locked: false,
+        ...payload,
+      },
+      publishers: this.publishers,
+    });
+
     if (room) {
       this.rooms.set(room.id, room);
       user.broadcast(this.topic, M.sRoomAddToList({ room: room.getState() }));
@@ -130,6 +148,9 @@ export class LobbyState implements Handlers<LobbyActions> {
   }
 
   cRoomDelete(payload: NT.ClientRoomDelete, user: UserState) {
+    // while the payload specifies a room, the (previous) server's behavior
+    // was to infer it from the room that the user is a member of, so the
+    // payload is explicitly ignored.
     user.room()?.delete(user);
   }
 

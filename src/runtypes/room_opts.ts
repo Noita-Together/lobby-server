@@ -1,6 +1,9 @@
 import { Static, Type as T } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
+import Debug from 'debug';
+const debug = Debug('nt:runtypes:room_options');
+
 // https://github.com/validatorjs/validator.js/blob/b958bd7d1026a434ad3bf90064d3dcb8b775f1a9/src/lib/isAscii.js#L7
 // modified to exclude < ascii 32
 const asciiRE = /^[\x20-\x7F]+$/;
@@ -47,11 +50,13 @@ export const validateRoomOpts = <
   if (password) opts.password = password.trim();
 
   if (!Value.Check(schema, opts)) {
-    const fields = [...Value.Errors(schema, opts)].map((ve) => {
-      console.error(`${ve.path}: ${ve.message} (${ve.value})`);
-      return ve.path.slice(1);
-    });
-    return `Invalid ${fields}`;
+    const fields = new Set(
+      [...Value.Errors(schema, opts)].map((ve) => {
+        debug(`${ve.path}: ${ve.message} (${ve.value})`);
+        return ve.path.slice(1);
+      }),
+    );
+    return `Invalid ${[...fields.values()].join(', ')}`;
   }
 
   return opts;

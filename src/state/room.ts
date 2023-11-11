@@ -6,11 +6,11 @@ import {
   UpdateRoomOpts,
   validateRoomOpts,
 } from '../runtypes/room_opts';
-import { Publishers, M, chat } from '../util';
+import { Publishers, M, createChat } from '../util';
 import { tagPlayerMove } from '../protoutil';
-import { GameActions, Handler, Handlers } from '../types';
+import { GameActions, Handlers } from '../types';
 
-import { UserState } from './user';
+import { IUser, UserState } from './user';
 import { LobbyState, SYSTEM_USER } from './lobby';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -68,6 +68,7 @@ export class RoomState implements Handlers<GameActions> {
 
   private lastFlags: Uint8Array;
 
+  private chat: (user: IUser, message: string) => NT.Envelope;
   // private playerPositions: PlayerPositions;
 
   private constructor(
@@ -75,11 +76,14 @@ export class RoomState implements Handlers<GameActions> {
     owner: UserState,
     { name, password, gamemode, maxUsers }: RoomStateCreateOpts,
     publishers: Publishers,
+    roomId?: string,
+    createChatId?: () => string,
   ) {
+    this.chat = createChat(createChatId);
     this.lobby = lobby;
 
     // this.id = `${id++}`;
-    this.id = uuidv4();
+    this.id = roomId ?? uuidv4();
 
     this.owner = owner;
     this.topic = `/room/${this.id}`;
@@ -131,22 +135,26 @@ export class RoomState implements Handlers<GameActions> {
     };
   }
 
-  static create(
-    lobby: LobbyState,
-    owner: UserState,
-    _opts: RoomStateCreateOpts,
-    publishers: Publishers,
-  ): RoomState | void {
+  static create({
+    lobby,
+    owner,
+    opts: _opts,
+    publishers,
+    roomId,
+    createChatId,
+  }: {
+    lobby: LobbyState;
+    owner: UserState;
+    opts: RoomStateCreateOpts;
+    publishers: Publishers;
+    roomId?: string;
+    createChatId?: () => string;
+  }): RoomState | void {
     let opts: RoomStateCreateOpts | string;
 
     if (process.env.DEV_MODE === 'true' && owner.uaccess < 3) {
       owner.send(M.sRoomCreateFailed({ reason: 'Room creation is disabled at the moment, Server is in dev mode :)' }));
       return;
-    }
-
-    if (owner.room() !== null) {
-      // user owned another room. probably they reconnected. destroy old room.
-      owner.room()!.destroy();
     }
 
     opts = validateRoomOpts(owner.uaccess > 1 ? CreateBigRoomOpts : CreateRoomOpts, _opts);
@@ -156,11 +164,14 @@ export class RoomState implements Handlers<GameActions> {
       return;
     }
 
+    // user owned another room. probably they reconnected. destroy old room.
+    owner.room()?.delete(owner);
+
     if (owner.uaccess === 0) {
       opts.name = `${owner.name}'s room`;
     }
 
-    const room = new RoomState(lobby, owner, opts, publishers);
+    const room = new RoomState(lobby, owner, opts, publishers, roomId, createChatId);
     debug(room.id, 'created');
 
     room.users.add(owner);
@@ -277,13 +288,8 @@ export class RoomState implements Handlers<GameActions> {
       else if (this.locked) reason = 'Room is locked.';
     } else if (room !== this) {
       // user got disconnected while in a room, but is trying to join a different
-      // room. remove them from their previous room.
-
-      if (room.owner === user) {
-        room.destroy();
-      } else {
-        user.parted(room);
-      }
+      // room. delete the old room if user is the owner, otherwise just leave
+      room.delete(user) || user.parted(room);
     } else {
       // user got disconnected while in a room, and is rejoining it. allow them in
     }
@@ -350,7 +356,7 @@ export class RoomState implements Handlers<GameActions> {
       this.broadcast(pb({ userId: target.id }));
 
       // send a chat message to the room
-      this.broadcast(chat(SYSTEM_USER, `${target.name} ${message}.`));
+      this.broadcast(this.chat(SYSTEM_USER, `${target.name} ${message}.`));
     }
 
     // this.playerPositions.updatePlayers(this.users);
@@ -369,9 +375,9 @@ export class RoomState implements Handlers<GameActions> {
     this.removeUser(actor, target, M.sUserBanned, 'has been banned from this room');
   }
 
-  delete(actor: UserState) {
+  delete(actor: UserState): boolean {
     // no error for this one either if invalid
-    if (this.owner !== actor) return;
+    if (this.owner !== actor) return false;
 
     // must send this message before calling this.destroy() - otherwise,
     // the users will have been unsubscribed from the topic and will not
@@ -380,6 +386,7 @@ export class RoomState implements Handlers<GameActions> {
 
     this.destroy();
     debug(this.id, 'deleted');
+    return true;
   }
 
   destroy() {
@@ -547,7 +554,7 @@ export class RoomState implements Handlers<GameActions> {
       }
       return;
     }
-    if (msg) user.withSocket(this.broadcast, chat(user, msg));
+    if (msg) user.withSocket(this.broadcast, this.chat(user, msg));
   }
   // cPlayerEmote - implemented in original, but doesn't seem to be referenced, and has no proto message
 

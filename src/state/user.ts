@@ -8,6 +8,7 @@ import { RoomState } from './room';
 import { LobbyState } from './lobby';
 
 import Debug from 'debug';
+import { ClientAuthWebSocket } from '../ws_handlers';
 const debug = Debug('nt:user');
 
 export interface IUser {
@@ -37,13 +38,13 @@ export class UserState implements IUser {
 
   // rooms can hang on to a UserState reference even if the user is disconnected. writing to
   // a stale websocket is an error, so we store a UserState with no socket as this.socket = null
-  private socket: WebSocket<unknown> | null;
+  private socket: ClientAuthWebSocket | null;
   private currentRoom: RoomState | null;
   private readyState: NT.ClientReadyState;
 
   readonly playerIdBuf: Buffer; // just don't modify this
 
-  constructor({ id, name }: { id: string; name: string }, socket: WebSocket<unknown>) {
+  constructor({ id, name }: { id: string; name: string }, socket: ClientAuthWebSocket) {
     this.id = id;
     this.name = name;
     this.uaccess = uaccess.get(name) ?? 0;
@@ -71,7 +72,7 @@ export class UserState implements IUser {
   withSocket<
     Arg extends unknown,
     Args extends Arg[],
-    T extends (...args: [...Args, WebSocket<unknown> | undefined]) => any,
+    T extends (...args: [...Args, ClientAuthWebSocket | undefined]) => any,
   >(fn: T, ...args: Args) {
     if (this.socket) fn(...args, this.socket);
   }
@@ -148,7 +149,7 @@ export class UserState implements IUser {
     debug(this.id, this.name, 'disconnected');
     this.socket = null;
   }
-  connected(ws: WebSocket<unknown>, lobby: LobbyState) {
+  connected(ws: ClientAuthWebSocket, lobby: LobbyState) {
     debug(this.id, this.name, 'connected');
     this.socket = ws;
 
@@ -163,7 +164,7 @@ export class UserState implements IUser {
     const ret = ws.subscribe(lobby.topic);
     // recordSubscribe(this.id, lobby.topic, ret);
   }
-  reconnected(ws: WebSocket<unknown>, lobby: LobbyState) {
+  reconnected(ws: ClientAuthWebSocket, lobby: LobbyState) {
     debug(this.id, this.name, 'reconnected');
     this.connected(ws, lobby);
 
