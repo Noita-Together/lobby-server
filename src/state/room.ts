@@ -12,11 +12,17 @@ import { GameActions, Handlers } from '../types';
 
 import { IUser, UserState } from './user';
 import { LobbyState, SYSTEM_USER } from './lobby';
+import { StatsEvent, StatsRecorder } from './stats_recorder';
 
 import { v4 as uuidv4 } from 'uuid';
 
 import Debug from 'debug';
 const debug = Debug('nt:room');
+
+export const STATS_BASE_URL = (() => {
+  const base = process.env.STATS_BASE_URL ?? 'http://localhost:3000/stats';
+  return base.endsWith('/') ? base : `${base}/`;
+})();
 
 let id = 0;
 
@@ -70,6 +76,8 @@ export class RoomState implements Handlers<GameActions> {
   private password?: string;
 
   private lastFlags: Uint8Array;
+  private stats: StatsRecorder | undefined = undefined;
+  private pastStats = new Map<string, string>();
 
   private chat: (user: IUser, message: string) => NT.Envelope;
   // private playerPositions: PlayerPositions;
@@ -81,6 +89,7 @@ export class RoomState implements Handlers<GameActions> {
     publishers: Publishers,
     roomId?: string,
     createChatId?: () => string,
+    private createStatsId?: () => string,
   ) {
     this.chat = createChat(createChatId);
     this.lobby = lobby;
@@ -163,6 +172,7 @@ export class RoomState implements Handlers<GameActions> {
     devMode,
     roomId,
     createChatId,
+    createStatsId,
   }: {
     lobby: LobbyState;
     owner: UserState;
@@ -171,6 +181,7 @@ export class RoomState implements Handlers<GameActions> {
     devMode: boolean;
     roomId?: string;
     createChatId?: () => string;
+    createStatsId?: () => string;
   }): RoomState | void {
     let opts: RoomStateCreateOpts | string;
 
@@ -193,7 +204,7 @@ export class RoomState implements Handlers<GameActions> {
       opts.name = `${owner.name}'s room`;
     }
 
-    const room = new RoomState(lobby, owner, opts, publishers, roomId, createChatId);
+    const room = new RoomState(lobby, owner, opts, publishers, roomId, createChatId, createStatsId);
     debug(room.id, 'created');
 
     room.users.add(owner);
@@ -215,6 +226,13 @@ export class RoomState implements Handlers<GameActions> {
     // );
 
     return room;
+  }
+
+  /**
+   * Get stats for a concluded run, if present
+   */
+  getStats(statsId: string): string | void {
+    return this.pastStats.get(statsId);
   }
 
   /**
@@ -308,6 +326,11 @@ export class RoomState implements Handlers<GameActions> {
 
     debug(this.id, 'start run');
 
+    if (this.gamemode === 0) {
+      // only tracking coop stats for now
+      this.stats = new StatsRecorder([...this.users.values()], this.createStatsId);
+    }
+
     // store the mods that users had at the start of a run
     for (const user of this.users) {
       this.allowedMods.set(user, user.mods());
@@ -327,6 +350,10 @@ export class RoomState implements Handlers<GameActions> {
    */
   private reset() {
     this.inProgress = false;
+    if (this.stats) {
+      this.pastStats.set(this.stats.id, JSON.stringify(this.stats.toJSON()));
+    }
+    this.stats = undefined;
 
     // the run is over. reset the "allowed mods" list
     this.allowedMods = new WeakMap();
@@ -351,6 +378,11 @@ export class RoomState implements Handlers<GameActions> {
     if (this.owner !== actor) return;
 
     debug(this.id, 'finish run');
+    if (this.stats) {
+      this.broadcast(
+        this.chat(SYSTEM_USER, `Stats for run can be found at ${STATS_BASE_URL}${this.id}/${this.stats.id}`),
+      );
+    }
 
     this.reset();
   }
@@ -589,15 +621,15 @@ export class RoomState implements Handlers<GameActions> {
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sPlayerPickup({ userId: user.id, ...payload }));
-    // stats stuff
-    // if (this.gamemode === 0) { // coop
-    //   switch (payload.kind.case) {
-    //     case 'heart':
-    //     break;
-    //     case 'orb':
-    //     break;
-    //   }
-    // }
+
+    switch (payload.kind.case) {
+      case 'heart':
+        this.stats?.increment(user, StatsEvent.HeartPickup);
+        break;
+      case 'orb':
+        this.stats?.increment(user, StatsEvent.OrbPickup);
+        break;
+    }
   }
   cNemesisAbility(payload: NT.ClientNemesisAbility, user: UserState) {
     if (!this.inProgress) return;
@@ -637,27 +669,24 @@ export class RoomState implements Handlers<GameActions> {
   // cCustomModHostEvent - implemented in original, but doesn't seem to be referenced, and has no proto message
   cAngerySteve(payload: NT.ClientAngerySteve, user: UserState) {
     if (!this.inProgress) return;
-    // if (this.gamemode === 0) { // coop
-    //   // stats stuff
-    // }
+
+    this.stats?.increment(user, StatsEvent.SteveKill);
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sAngerySteve({ userId: user.id, ...payload }));
   }
   cRespawnPenalty(payload: NT.ClientRespawnPenalty, user: UserState) {
     if (!this.inProgress) return;
-    // if (this.gamemode === 0) { // coop
-    //   // stats stuff
-    // }
+
+    this.stats?.increment(user, StatsEvent.UserDeath);
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sRespawnPenalty({ userId: user.id, ...payload }));
   }
   cPlayerDeath(payload: NT.ClientPlayerDeath, user: UserState) {
     if (!this.inProgress) return;
-    // if (this.gamemode === 0) { // coop
-    //   // stats stuff
-    // }
+
+    this.stats?.increment(user, payload.isWin ? StatsEvent.UserWin : StatsEvent.UserDeath);
 
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sPlayerDeath({ userId: user.id, ...payload }));

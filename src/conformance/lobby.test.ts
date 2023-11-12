@@ -12,7 +12,12 @@ type sentMessage = {
   message: PartialMessage<Envelope>;
 };
 
-const createTestEnv = (devMode: boolean, createRoomId?: () => string, createChatId?: () => string) => {
+const createTestEnv = (
+  devMode: boolean,
+  createRoomId?: () => string,
+  createChatId?: () => string,
+  createStatsId?: () => string,
+) => {
   const debug = () => {};
 
   const sentMessages: sentMessage[] = [];
@@ -28,7 +33,7 @@ const createTestEnv = (devMode: boolean, createRoomId?: () => string, createChat
     createChatId,
   );
 
-  const lobby = new LobbyState(publishers, devMode, createRoomId, createChatId);
+  const lobby = new LobbyState(publishers, devMode, createRoomId, createChatId, createStatsId);
 
   const { signToken, verifyToken } = createJwtFns('test secret', 'test refresh');
 
@@ -315,6 +320,48 @@ describe('lobby conformance tests', () => {
       const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
       expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
       expect(sentMessages).toEqual([]);
+    });
+  });
+
+  describe('stats', () => {
+    it('returns stats for rooms that are still open', () => {
+      const { testSocket, handleOpen, handleMessage, lobby } = createTestEnv(
+        false,
+        () => 'room',
+        () => 'chat',
+        () => 'stats',
+      );
+      const user = testSocket('id', 'name');
+
+      handleOpen(user);
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+      handleMessage(user, M.cStartRun({ forced: false }).toBinary(), true);
+      handleMessage(user, M.cRunOver({}).toBinary(), true);
+
+      expect(lobby.getStats('room', 'stats')).toEqual(
+        `{"id":"stats","headings":["Player","SteveKill","UserDeath","UserWin","HeartPickup","OrbPickup"],"rows":[["name",0,0,0,0,0]]}`,
+      );
+    });
+    it('returns undefined for invalid stats ids', () => {
+      const { lobby } = createTestEnv(false);
+      expect(lobby.getStats('room', 'nope')).toBeUndefined();
+    });
+    it('returns undefined for closed rooms', () => {
+      const { testSocket, handleOpen, handleMessage, lobby } = createTestEnv(
+        false,
+        () => 'room',
+        () => 'chat',
+        () => 'stats',
+      );
+      const user = testSocket('id', 'name');
+
+      handleOpen(user);
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+      handleMessage(user, M.cStartRun({ forced: false }).toBinary(), true);
+      handleMessage(user, M.cRunOver({}).toBinary(), true);
+      handleMessage(user, M.cRoomDelete({ id: 'room' }).toBinary(), true);
+
+      expect(lobby.getStats('room', 'stats')).toBeUndefined();
     });
   });
 
@@ -2337,7 +2384,16 @@ describe('lobby conformance tests', () => {
       serverMessages: (users) => [
         ...u1create_u2ready_u3join.serverMessages(users),
         sm('/room/room1', null, M.sHostStart({ forced: false /* always sent*/ })),
-        // no message sent for run over
+        sm(
+          '/room/room1',
+          null,
+          M.sChat({
+            id: 'chat1',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: `Stats for run can be found at http://localhost:3000/stats/room1/stats1`,
+          }),
+        ),
         sm(
           '/room/room1',
           null,
@@ -2390,6 +2446,16 @@ describe('lobby conformance tests', () => {
         sm(
           '/room/room1',
           null,
+          M.sChat({
+            id: 'chat1',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: `Stats for run can be found at http://localhost:3000/stats/room1/stats1`,
+          }),
+        ),
+        sm(
+          '/room/room1',
+          null,
           M.sUserReadyState({
             userId: '42069',
             mods: [],
@@ -2414,6 +2480,7 @@ describe('lobby conformance tests', () => {
       ['all', M.cPlayerAddItem({ item: { case: 'spells', value: { list: [] } } })],
       ['toHost', M.cPlayerTakeItem({ id: '1' })],
       ['others', M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } })],
+      ['others', M.cPlayerPickup({ kind: { case: 'orb', value: { id: 1 } } })],
       ['others', M.cNemesisAbility({ gameId: '1' })],
       ['others', M.cNemesisPickupItem({ gameId: '1' })],
       ['others', M.cPlayerNewGamePlus({ amount: 1 })],
@@ -2422,6 +2489,7 @@ describe('lobby conformance tests', () => {
       ['others', M.cAngerySteve({ idk: true })],
       ['others', M.cRespawnPenalty({ deaths: 1 })],
       ['others', M.cPlayerDeath({ isWin: true })],
+      ['others', M.cPlayerDeath({ isWin: false })],
       ['others', M.playerMove({ frames: [{ x: 1, y: 2 }] })],
       ['never', M.playerMove({ userId: 'disallowed from client', frames: [{ x: 1, y: 2 }] })],
     ];
@@ -2505,11 +2573,15 @@ describe('lobby conformance tests', () => {
     it.each(tests)('$name', ({ clientMessages, serverMessages }) => {
       let roomId = 1;
       let chatId = 1;
+      let statsId = 1;
+
       const env = createTestEnv(
         false,
         () => `room${roomId++}`,
         () => `chat${chatId++}`,
+        () => `stats${statsId++}`,
       );
+
       const { sentMessages, testSocket, handleOpen, handleMessage } = env;
 
       const users: Record<string, ClientAuthWebSocket> = {

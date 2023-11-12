@@ -10,10 +10,16 @@ export const SYSTEM_USER: IUser = { id: '-1', name: '[SYSTEM]' };
 export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]' };
 
 import Debug from 'debug';
+import { StatsRecorder } from './stats_recorder';
 const debug = Debug('nt:lobby');
 
 type Simplify<T> = { [K in keyof T]: T[K] } & unknown;
 type createRoomParams = Simplify<Omit<Parameters<typeof RoomState.create>[0], 'roomId'>>;
+
+type roomStats = {
+  jsonString: string;
+  roomId: string;
+};
 
 /**
  * Represents the state of an NT lobby. Currently there is exactly one lobby per
@@ -27,6 +33,7 @@ export class LobbyState implements Handlers<LobbyActions> {
 
   private rooms = new Map<string, RoomState>();
   private users = new Map<string, UserState>();
+  private stats = new Map<string, roomStats>();
 
   /**
    * Construct a new Lobby
@@ -41,6 +48,7 @@ export class LobbyState implements Handlers<LobbyActions> {
     private devMode: boolean,
     private createRoomId?: () => string,
     private createChatId?: () => string,
+    private createStatsId?: () => string,
   ) {
     this.publishers = publishers;
     this.broadcast = publishers.broadcast(this.topic);
@@ -157,6 +165,13 @@ export class LobbyState implements Handlers<LobbyActions> {
   }
 
   /**
+   * Return the stats record for the given id, if present
+   */
+  getStats(roomId: string, statsId: string): string | void {
+    return this.rooms.get(roomId)?.getStats(statsId);
+  }
+
+  /**
    * Create a new room. Fills the configured id-creators from this
    * instance's properties. Used only for testing.
    *
@@ -169,6 +184,7 @@ export class LobbyState implements Handlers<LobbyActions> {
       ...params,
       ...(this.createRoomId ? { roomId: this.createRoomId() } : {}),
       ...(this.createChatId ? { createChatId: this.createChatId } : {}),
+      ...(this.createStatsId ? { createStatsId: this.createStatsId } : {}),
     });
   }
 

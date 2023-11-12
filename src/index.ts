@@ -17,18 +17,19 @@ const asNumber = (v: unknown, dflt: number): number => {
   return n;
 };
 
-const WS_KEY_FILE: string = process.env.WS_KEY_FILE ?? '';
-const WS_CERT_FILE: string = process.env.WS_CERT_FILE ?? '';
-const WS_SECURE = WS_KEY_FILE !== '' && WS_CERT_FILE !== '';
-const WS_HOST = process.env.WS_HOST ?? '0.0.0.0';
-const WS_PORT = asNumber(process.env.WS_PORT, 4444);
+const TLS_KEY_FILE: string = process.env.WS_KEY_FILE ?? '';
+const TLS_CERT_FILE: string = process.env.WS_CERT_FILE ?? '';
+const USE_TLS = TLS_KEY_FILE !== '' && TLS_CERT_FILE !== '';
+const APP_HOST = process.env.WS_HOST ?? '0.0.0.0';
+const APP_PORT = asNumber(process.env.WS_PORT, 4444);
 const WS_PATH = process.env.WS_PATH ?? '/ws';
-const WS_UNIX_SOCKET = process.env.WS_UNIX_SOCKET ?? '';
+const API_PATH = process.env.API_PATH ?? '/api';
+const APP_UNIX_SOCKET = process.env.WS_UNIX_SOCKET ?? '';
 
-const app = WS_SECURE
+const app = USE_TLS
   ? uWS.SSLApp({
-      key_file_name: WS_KEY_FILE,
-      cert_file_name: WS_CERT_FILE,
+      key_file_name: TLS_KEY_FILE,
+      cert_file_name: TLS_CERT_FILE,
     })
   : uWS.App();
 
@@ -67,25 +68,56 @@ const shutdown = () => {
   sockets.forEach((socket) => socket.close());
 };
 
-app.ws<ClientAuth>(`${WS_PATH}/:token`, {
-  idleTimeout: 120,
-  sendPingsAutomatically: true,
-  maxLifetime: 0,
-  maxPayloadLength: 16 * 1024 * 1024,
-  upgrade: handleUpgrade,
-  open: handleOpen,
-  close: handleClose,
-  message: handleMessage,
-});
+app
+  .ws<ClientAuth>(`${WS_PATH}/:token`, {
+    idleTimeout: 120,
+    sendPingsAutomatically: true,
+    maxLifetime: 0,
+    maxPayloadLength: 16 * 1024 * 1024,
+    upgrade: handleUpgrade,
+    open: handleOpen,
+    close: handleClose,
+    message: handleMessage,
+  })
+  .get(`${API_PATH}/health`, (res) => {
+    res.writeStatus('200 OK').end();
+  })
+  .get(`${API_PATH}/stats/:roomid/:statsid`, (res, req) => {
+    const roomId = req.getParameter(0);
+    const statsId = req.getParameter(1);
 
-if (WS_UNIX_SOCKET) {
+    const jsonStr = lobby.getStats(roomId, statsId);
+
+    if (!jsonStr) {
+      res.writeStatus('404 Not Found').end();
+      return;
+    }
+
+    res.writeStatus('200 OK').writeHeader('Content-Type', 'application/json; charset=utf-8').end(jsonStr);
+  });
+
+if (APP_UNIX_SOCKET) {
   app.listen_unix((token) => {
-    console.log(`Listening on ${WS_SECURE ? 'wss' : 'ws'}://[unix:${WS_UNIX_SOCKET}]${WS_PATH}`, token);
+    console.log(
+      `Listening for websocket connections on ${USE_TLS ? 'wss' : 'ws'}://[unix:${APP_UNIX_SOCKET}]${WS_PATH}`,
+      token,
+    );
+    console.log(
+      `Listening for HTTP connections on ${USE_TLS ? 'https' : 'http'}://[unix:${APP_UNIX_SOCKET}]${API_PATH}`,
+      token,
+    );
     listen_sockets.push(token);
-  }, WS_UNIX_SOCKET);
+  }, APP_UNIX_SOCKET);
 } else {
-  app.listen(WS_HOST, WS_PORT, (token) => {
-    console.log(`Listening on ${WS_SECURE ? 'wss' : 'ws'}://${WS_HOST}:${WS_PORT}${WS_PATH}`, token);
+  app.listen(APP_HOST, APP_PORT, (token) => {
+    console.log(
+      `Listening for websocket connections on ${USE_TLS ? 'wss' : 'ws'}://${APP_HOST}:${APP_PORT}${WS_PATH}`,
+      token,
+    );
+    console.log(
+      `Listening for HTTP connections on ${USE_TLS ? 'https' : 'http'}://${APP_HOST}:${APP_PORT}${API_PATH}`,
+      token,
+    );
     listen_sockets.push(token);
   });
 }

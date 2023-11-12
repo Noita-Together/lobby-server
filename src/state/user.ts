@@ -13,6 +13,7 @@ export interface IUser {
   readonly name: string;
 }
 
+// TODO: read this from disk like before
 const uaccess = new Map<string, number>([
   ['SkyeOfBreeze', 3],
   ['kabbypls', 3],
