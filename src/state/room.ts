@@ -45,6 +45,9 @@ export type RoomUpdate = {
 type RoomStateCreateOpts = CreateRoomOpts | CreateBigRoomOpts;
 type RoomStateUpdateOpts = UpdateRoomOpts | UpdateBigRoomOpts;
 
+/**
+ * Represents the state of a room in an NT lobby
+ */
 export class RoomState implements Handlers<GameActions> {
   private static readonly emptyFlags = M.sRoomFlagsUpdated().toBinary();
 
@@ -102,10 +105,17 @@ export class RoomState implements Handlers<GameActions> {
     // this.playerPositions = new PlayerPositions(this.broadcast, 50);
   }
 
+  /**
+   * Return an iterator for the users present in this  room
+   */
   getUsers(): IterableIterator<UserState> {
     return this.users.values();
   }
 
+  /**
+   * Return the simplified representation of a user, used to
+   * construct "users in this room" messages
+   */
   private roomUpdateUserData(user: UserState) {
     return {
       userId: user.id,
@@ -115,6 +125,10 @@ export class RoomState implements Handlers<GameActions> {
     };
   }
 
+  /**
+   * Return the simplified representation of a room, used to
+   * construct room update messages
+   */
   getState(): RoomUpdate {
     // TODO: not all of these fields get used by every protobuf message. in particular,
     // `password` is elided from most of the messages when being encoded. ideally, we
@@ -135,6 +149,12 @@ export class RoomState implements Handlers<GameActions> {
     };
   }
 
+  /**
+   * Create a new room. Returns `null` if the room could not be created.
+   *
+   * `roomId` and `createChatId` are test stubs, and should not be used
+   * in production.
+   */
   static create({
     lobby,
     owner,
@@ -197,28 +217,42 @@ export class RoomState implements Handlers<GameActions> {
     return room;
   }
 
-  update(actor: UserState, _opts: RoomStateUpdateOpts): string | void {
+  /**
+   * Update the room's settings
+   *
+   * @param actor UserState instance of the user making the change
+   */
+  update(actor: UserState, opts: RoomStateUpdateOpts): string | void {
     if (this.owner !== actor) return "Can't do that.";
 
     // TODO: is this valid during a run?
 
-    const opts = validateRoomOpts(this.owner.uaccess > 1 ? UpdateBigRoomOpts : UpdateRoomOpts, _opts);
-    if (typeof opts === 'string') return opts;
+    const _opts = validateRoomOpts(this.owner.uaccess > 1 ? UpdateBigRoomOpts : UpdateRoomOpts, opts);
+    if (typeof _opts === 'string') return _opts;
 
     /* istanbul ignore next */
     if (debug.enabled) {
-      debug(this.id, 'updating options', this.DEBUG_ONLY_optsValue(_opts, opts));
+      debug(this.id, 'updating options', this.DEBUG_ONLY_optsValue(opts, _opts));
     }
 
-    if (opts.name !== undefined) this.name = opts.name;
-    if (opts.password !== undefined) this.password = opts.password;
-    if (opts.gamemode !== undefined) this.gamemode = opts.gamemode;
-    if (opts.maxUsers !== undefined) this.maxUsers = opts.maxUsers;
-    if (opts.locked !== undefined) this.locked = opts.locked;
+    if (_opts.name !== undefined) this.name = _opts.name;
+    if (_opts.password !== undefined) this.password = _opts.password;
+    if (_opts.gamemode !== undefined) this.gamemode = _opts.gamemode;
+    if (_opts.maxUsers !== undefined) this.maxUsers = _opts.maxUsers;
+    if (_opts.locked !== undefined) this.locked = _opts.locked;
 
-    this.broadcast(M.sRoomUpdated(opts));
+    this.broadcast(M.sRoomUpdated(_opts));
   }
 
+  /**
+   * Update the room's flags
+   *
+   * Most flags are set to `true` if present in the `flags` array in the payload,
+   * and `false` if not present (even though the payload has a boolean value that
+   * could be used for this purpose)
+   *
+   * @param actor UserState instance of the user making the change
+   */
   setFlags(actor: UserState, payload: NT.ClientRoomFlagsUpdate): string | void {
     if (this.owner !== actor) return "Can't do that.";
 
@@ -234,13 +268,25 @@ export class RoomState implements Handlers<GameActions> {
     this.broadcast(flags);
   }
 
+  /**
+   * Return the encoded ServerRoomFlagsUpdated message representing the
+   * current room flags
+   */
   getFlags(): Uint8Array {
     return this.lastFlags;
   }
 
+  /**
+   * Called when the readyState of a user present in this room has changed
+   *
+   * @param actor UserState instance of the user whose readyState changed
+   */
   onUserReadyStateChange(actor: UserState, payload: NT.ClientReadyState) {
     this.broadcast(M.sUserReadyState({ userId: actor.id, ...payload }));
 
+    // if the game is already in progress, and the user's mods have not
+    // changed from what they were when the game started, send them a
+    // synthetic "start" message so that they can immediately begin playing
     if (this.inProgress && payload.ready) {
       const allowedMods = this.allowedMods.get(actor);
       if (allowedMods !== actor.mods()) return;
@@ -248,6 +294,14 @@ export class RoomState implements Handlers<GameActions> {
     }
   }
 
+  /**
+   * Set the room's run status to "in progress" and notify the room's users.
+   *
+   * For each user, stores their current list of mods; this is used to auto-
+   * start the run if they rejoin (and their mods haven't changed)
+   *
+   * @param actor UserState instance of the initiating user
+   */
   startRun(actor: UserState, payload: NT.ClientStartRun) {
     // no error for this yet
     if (this.owner !== actor) return;
@@ -268,7 +322,12 @@ export class RoomState implements Handlers<GameActions> {
     // this.broadcast(M.sHostStart(payload));
   }
 
-  private resetUserStates() {
+  /**
+   * Reset the room's state.
+   */
+  private reset() {
+    this.inProgress = false;
+
     // the run is over. reset the "allowed mods" list
     this.allowedMods = new WeakMap();
 
@@ -282,16 +341,26 @@ export class RoomState implements Handlers<GameActions> {
     // an empty readystate. investigation needed
   }
 
+  /**
+   * End the current run
+   *
+   * @param actor UserState instance of the initiating user
+   */
   finishRun(actor: UserState) {
     // no error for this yet
     if (this.owner !== actor) return;
 
     debug(this.id, 'finish run');
 
-    this.inProgress = false;
-    this.resetUserStates();
+    this.reset();
   }
 
+  /**
+   * Attempt to join a user to this room
+   *
+   * @param user UserState instance of the joining user
+   * @param password Supplied password, if any, that the user gave when attempting to join
+   */
   join(user: UserState, password?: string): void {
     let reason: string | null = null;
     const room = user.room();
@@ -342,6 +411,14 @@ export class RoomState implements Handlers<GameActions> {
     // );
   }
 
+  /**
+   * Remove a user from this room
+   *
+   * @param actor UserState instance of the user initiating the removal, or `null` if voluntary
+   * @param target UserState instance of the user being removed
+   * @param pb Envelope creator for the control message to be sent
+   * @param message Human-readable message explaining why the user left
+   */
   private removeUser<T extends (...args: any) => NT.Envelope>(
     actor: UserState | null,
     target: UserState | undefined,
@@ -380,20 +457,41 @@ export class RoomState implements Handlers<GameActions> {
     debug(this.id, 'user left', target.id, target.name, message);
   }
 
+  /**
+   * Voluntary leave this room
+   *
+   * @param actor UserState instance of the user leaving the room
+   */
   part(actor: UserState) {
     this.removeUser(null, actor, M.sUserLeftRoom, 'has left.');
   }
 
+  /**
+   * Remove a user from this room. They may rejoin.
+   *
+   * @param actor UserState instance of the initiating user
+   * @param target UserState instance of the user being removed
+   */
   kick(actor: UserState, target: UserState) {
     this.removeUser(actor, target, M.sUserKicked, 'has been kicked from this room.');
   }
 
+  /**
+   * Remove a user from this room. They may NOT rejoin.
+   *
+   * @param actor UserState instance of the initiating user
+   * @param target UserState instance of the user being removed
+   */
   ban(actor: UserState, target: UserState) {
     this.bannedUsers.add(target.id);
     this.removeUser(actor, target, M.sUserBanned, 'has been banned from this room.');
   }
 
-  // thin wrapper around destroy to check permission
+  /**
+   * Gracefully tear down this room. Checks permissions of the actor.
+   *
+   * @param actor UserState instance of the initiating user
+   */
   delete(actor: UserState): boolean {
     // no error for this one either if invalid
     if (this.owner !== actor) return false;
@@ -402,7 +500,10 @@ export class RoomState implements Handlers<GameActions> {
     return true;
   }
 
-  // tear down a room and its state
+  /**
+   * Gracefully tear down this room. Does NOT check permissions; should
+   * be used only by system processes.
+   */
   destroy() {
     this.broadcast(M.sRoomDeleted({ id: this.id }));
 

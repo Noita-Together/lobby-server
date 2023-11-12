@@ -21,6 +21,11 @@ const createRoomOpts = {
   locked: T.Boolean(),
 };
 
+// There are currently(?) two "uaccess" modes that matter to room creation: default (0)
+// and privileged (non-zero). Privileged users may choose their room's name and are
+// allowed to create larger rooms. When validating room options, we select either
+// "CreateRoomOpts" or "CreateBigRoomOpts" depending on the user's access level.
+
 export const CreateRoomOpts = T.Object({
   ...createRoomOpts,
   maxUsers: T.Integer({ minimum: 1, maximum: 30 }),

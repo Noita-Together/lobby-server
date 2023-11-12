@@ -17,6 +17,12 @@ export type ClientAuthWebSocket = Pick<
   'getUserData' | 'send' | 'publish' | 'subscribe' | 'unsubscribe' | 'close'
 >;
 
+/**
+ * Returns a set of state and functions used to implement the uWebSockets TemplatedApp interface.
+ *
+ * Abstracted here to enable direct testing of these functions without having to wrangle a bunch
+ * of sockets.
+ */
 export const createMessageHandler = ({
   verifyToken,
   lobby,
@@ -80,8 +86,6 @@ export const createMessageHandler = ({
       console.error('BUG: userState not present in weakmap');
       return;
     }
-
-    // recordReceive(user.id, message);
 
     // optimized message handling for player move updates
     const buf = Buffer.from(message);

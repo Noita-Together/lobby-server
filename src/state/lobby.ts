@@ -6,8 +6,8 @@ import { Publishers, M } from '../util';
 import { IUser, UserState } from './user';
 import { RoomState } from './room';
 
-export const SYSTEM_USER: IUser = { id: '-1', name: '[SYSTEM]', lastX: 0, lastY: 0 };
-export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]', lastX: 0, lastY: 0 };
+export const SYSTEM_USER: IUser = { id: '-1', name: '[SYSTEM]' };
+export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]' };
 
 import Debug from 'debug';
 const debug = Debug('nt:lobby');
@@ -15,6 +15,10 @@ const debug = Debug('nt:lobby');
 type Simplify<T> = { [K in keyof T]: T[K] } & unknown;
 type createRoomParams = Simplify<Omit<Parameters<typeof RoomState.create>[0], 'roomId'>>;
 
+/**
+ * Represents the state of an NT lobby. Currently there is exactly one lobby per
+ * running instance.
+ */
 export class LobbyState implements Handlers<LobbyActions> {
   private readonly publishers: Publishers;
   readonly broadcast: ReturnType<Publishers['broadcast']>;
@@ -24,6 +28,14 @@ export class LobbyState implements Handlers<LobbyActions> {
   private rooms = new Map<string, RoomState>();
   private users = new Map<string, UserState>();
 
+  /**
+   * Construct a new Lobby
+   *
+   * @param publishers Set of functions for broadcasting messages to users in this lobby. Bad abstraction - fix.
+   * @param devMode When `true`, only users with dev access may create rooms
+   * @param createRoomId Used only for testing
+   * @param createChatId Used only for testing
+   */
   constructor(
     publishers: Publishers,
     private devMode: boolean,
@@ -34,6 +46,12 @@ export class LobbyState implements Handlers<LobbyActions> {
     this.broadcast = publishers.broadcast(this.topic);
   }
 
+  /**
+   * Responsible for handling reconnection logic. Returns either a
+   * previously-present UserState instance or a new one.
+   *
+   * @param ws WebSocket associated with the connected user
+   */
   userConnected(ws: ClientAuthWebSocket): UserState {
     // rooms retain a reference to the UserState of their owner and any users present in the room.
     // if the user gets disconnected, we don't want to destroy the room (and possibly kick everybody
@@ -46,14 +64,13 @@ export class LobbyState implements Handlers<LobbyActions> {
     //
     // TODO: make electron app gracefully close the websocket, so we know the difference between
     // the user intentionally exiting and getting disconnected unexpectedly
-    //
-    // TODO: we can clean up dangling rooms after they've been dead for a certain amount of time,
-    // and should have some information communicated on the RoomState to describe rooms that have
-    // no connected host.
 
     const { sub: id, preferred_username: name } = ws.getUserData();
 
-    // TODO: what happens if a user launches multiple clients?
+    // TODO: what do we want to happen if a user launches multiple clients?
+    // - in the new proto proposal, each user has a lobby id that is distinct
+    //   from their authenticated/twitch id. this would allow mulitple instances
+    //   of the same "real" user to be kept separate and not conflict.
     let user: UserState | undefined = this.users.get(id);
 
     // this is a bit hairy, but:
@@ -79,6 +96,14 @@ export class LobbyState implements Handlers<LobbyActions> {
     return user;
   }
 
+  /**
+   * Called when a user disconnects. Cleans up empty rooms, and destroys
+   * the UserState instance if nothing cares.
+   *
+   * @param user UserState instance of the user that disconnected
+   * @param code WebSocket close code
+   * @param message Optional (frequently empty) close reason
+   */
   userDisconnected(user: UserState, code: number, message: ArrayBuffer) {
     debug(user.id, user.name, 'disconnected', code, Buffer.from(message).toString());
     // TODO: NT app needs to send a graceful exit so we can tell the difference between
@@ -101,6 +126,11 @@ export class LobbyState implements Handlers<LobbyActions> {
     }
   }
 
+  /**
+   * Destroy a room if it contains no connected users
+   *
+   * @param room RoomState instance to (maybe) clean up
+   */
   private gc(room: RoomState) {
     // we could use bookkeeping to keep a count of connected users per room to
     // avoid the work of enumerating the connected-state of all users in the room,
@@ -117,10 +147,23 @@ export class LobbyState implements Handlers<LobbyActions> {
     room.destroy();
   }
 
+  /**
+   * Called when a room is destroyed. Used for bookkeeping.
+   *
+   * @param room RoomState instance of the room that was destroyed
+   */
   roomDestroyed(room: RoomState) {
     this.rooms.delete(room.id);
   }
 
+  /**
+   * Create a new room. Fills the configured id-creators from this
+   * instance's properties. Used only for testing.
+   *
+   * Bad abstraction; improve later. Probably we should have a
+   * looser coupling for these cross-state-class interactions,
+   * some kind of factory function interface maybe?
+   */
   private createRoom(params: createRoomParams): RoomState | void {
     return RoomState.create({
       ...params,

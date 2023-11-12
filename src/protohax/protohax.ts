@@ -34,6 +34,10 @@ type Packable = keyof ProtoHax &
   );
 type Unpacked<T extends Packable> = ProtoHax[T] extends () => infer P ? P : never;
 
+/**
+ * Read selected values from a serialized protocol buffer message. Used to optimize
+ * the processing time of PlayerMove messages.
+ */
 export class ProtoHax {
   private pos: number = 0;
   private last: number = 0;

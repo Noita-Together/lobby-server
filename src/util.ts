@@ -6,7 +6,6 @@ import { IUser } from './state/user';
 import { Envelope, GameAction, LobbyAction } from './gen/messages_pb';
 
 import { GameActions, LobbyActions } from './types';
-// import { recordPublish } from './record';
 
 import Debug from 'debug';
 const debug = Debug('nt:util');
@@ -22,6 +21,15 @@ type Creators<T extends PlainMessage<AnyMessage>> = {
   [K in keyof T]: (data?: PlainMessage<T[K]>) => Envelope;
 } & unknown;
 
+/**
+ * Factory functions for each action type. Each function
+ * accepts an action payload and returns an `Envelope` instance
+ *
+ * @example
+ * ```ts
+ * M.cChat({ message: 'hi there' })
+ * ```
+ */
 export const M: Creators<LobbyActionCreator & GameActionCreator> = {} as any;
 
 for (const f of GameAction.fields.list()) {
@@ -58,12 +66,12 @@ for (const f of LobbyAction.fields.list()) {
 
 type HasPublish = Pick<WebSocket<unknown>, 'publish'>;
 
+/**
+ * Returns a set of factory functions for publishing to specific topics on the uWS app
+ */
 export const BindPublishers = (app: TemplatedApp, createChatId: () => string = uuidv4) => {
   const publish = (topic: string, message: Uint8Array | Envelope, target: HasPublish = app) => {
-    // const env = message instanceof Uint8Array ? Envelope.fromBinary(message) : message;
-    // console.log('publish', topic, env.kind.case, env.kind.value?.action.case);
-    const ret = target.publish(topic, message instanceof Uint8Array ? message : message.toBinary(), true, false);
-    // recordPublish('app', topic, message, ret);
+    target.publish(topic, message instanceof Uint8Array ? message : message.toBinary(), true, false);
   };
 
   return {
@@ -83,6 +91,9 @@ export const BindPublishers = (app: TemplatedApp, createChatId: () => string = u
   };
 };
 
+/**
+ * Factory function for creating chat message payloads
+ */
 export const createChat =
   (createChatId: () => string = uuidv4) =>
   (user: IUser, message: string) =>

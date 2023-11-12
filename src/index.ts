@@ -6,7 +6,6 @@ import { LobbyState } from './state/lobby';
 import { createJwtFns } from './jwt';
 import { createMessageHandler } from './ws_handlers';
 import { BindPublishers } from './util';
-// import { recordReceive } from './record';
 
 import Debug from 'debug';
 const debug = Debug('nt');

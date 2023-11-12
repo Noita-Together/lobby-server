@@ -4,6 +4,10 @@ export enum AuthProvider {
   Twitch = 'twitch',
 }
 
+/**
+ * The relevant JWT-defined properties present in the Noita
+ * Together JWT
+ */
 export const JWT = T.Object({
   sub: T.String(), // twitch user id
   iat: T.Number(), // issued at; epoch, in seconds
@@ -11,6 +15,9 @@ export const JWT = T.Object({
 });
 export type JWT = Static<typeof JWT>;
 
+/**
+ * The properties present in the Noita Together JWT payload
+ */
 export const NTAuth = T.Object({
   preferred_username: T.String(),
   profile_image_url: T.String(),
