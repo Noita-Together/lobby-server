@@ -1,0 +1,298 @@
+syntax = "proto3";
+package NewNT;
+
+// messages to be displayed in the app. chat, notices, errors, etc.
+message Message {
+    enum Type {
+        MESSAGE_TYPE_UNDEFINED = 0;
+        MESSAGE_TYPE_ERROR = 1;
+        MESSAGE_TYPE_NOTICE = 2;
+        MESSAGE_TYPE_SYSTEM = 3;
+        MESSAGE_TYPE_CHAT = 4;
+    }
+    // the type of message
+    Type type = 1;
+    // the text content of the message
+    string text = 2;
+
+    // (optional) the room in which to display the message
+    uint32 room_id = 14;
+    // (optional) the user the message was sent by.
+    // only valid for MESSAGE_TYPE_CHAT
+    uint32 user_id = 15;
+}
+
+// represents a list of ids, or a change to an existing list
+message List {
+    enum Type {
+        LIST_TYPE_UNDEFINED = 0;
+        // add these ids to the list
+        LIST_TYPE_ADD = 1;
+        // replace the list with these ids
+        LIST_TYPE_SET = 2;
+        // remove these ids from the list
+        LIST_TYPE_DEL = 3;
+    }
+    // the type of operation
+    Type type = 1;
+    // a list of lobby ids
+    repeated uint32 ids = 2;
+}
+
+// a mod loaded in the user's game
+message Mod {
+    // the human-readable name of the mod
+    string name = 1;
+    // the hash of the mod contents (for grouping/tamper-checking)
+    string hash = 2;
+}
+
+// messages governing user state in the NT app
+message User {
+    enum Status {
+        USER_STATUS_UNDEFINED = 0;
+        USER_STATUS_CONNECTED = 1;
+        USER_STATUS_DISCONNECTED = 2;
+    }
+
+    // an identifier associating this user with an external
+    // authentication system, e.g. twitch
+    string auth_id = 1;
+    // the human-readable display name of the user
+    string display_name = 2;
+    // whether the user is currently connected
+    Status status = 3;
+    // whether the user's game is currently in sync with the lobby
+    bool ready = 4;
+    // the current seed of the user's game
+    string seed = 5;
+    // a list of mods installed by the user
+    repeated Mod mods = 6;
+    // the version of the NT client app this user is running
+    string version = 7;
+
+    // the user's lobby id; this is a surrogate value that should map
+    // to auth_id, but is used to reference this user in other messages
+    uint32 id = 15;
+}
+
+// messages governing the room state in the NT app
+message Room {
+    enum GameMode {
+        ROOM_GAME_MODE_UNDEFINED = 0;
+        ROOM_GAME_MODE_COOP = 1;
+        ROOM_GAME_MODE_NEMESIS = 2;
+    }
+
+    // represents the current state of this room's run. a "run" in this context
+    // is a game played by the room's members from a fresh start / new game through
+    // to completion (failure or victory)
+    enum RunStatus {
+        ROOM_RUN_STATUS_UNDEFINED = 0;
+        // NOT_STARTED is the idle state: a new room was created, or a run
+        // has ended gracefully
+        ROOM_RUN_STATUS_NOT_STARTED = 1;
+        // ACTIVE is the "game in progress" state: when a run transitions
+        // from NOT_STARTED to ACTIVE, the mod's should initialize a new
+        // run to a fresh, blank state derived from the room's relevant
+        // settings and flags
+        ROOM_RUN_STATUS_ACTIVE = 2;
+        // PAUSED is not used yet, but can be used to represent an inactive
+        // game that should NOT reset the game state when transitioning back
+        // to ACTIVE
+        ROOM_RUN_STATUS_PAUSED = 3;
+    }
+
+    // the human-readable name of the room
+    string name = 1;
+    // the lobby-id of the room's host/owner
+    uint32 owner_id = 2;
+    // the maximum number of users allowed to join the room
+    uint32 max_users = 3;
+    // the room's password, if set. specified by the client but NOT sent by the server.
+    // server can indicate presence of a password by setting it to any non-empty string
+    string password = 4;
+    // users may not join the room when locked = true
+    bool locked = 5;
+    // the type of game to be played (cooperative or nemesis [antagonistic])
+    GameMode game_mode = 6;
+    // the current state of the run associated with this room
+    RunStatus run_status = 7;
+    // only has meaning to the mod and app, so there's no
+    // reason to try to represent it at the proto level
+    string flags_json = 8;
+
+    // users are global to the lobby; we maintain only a list of
+    // references to their ids here
+    List user_ids = 9;
+
+    // the user this message came from. ignored when received from client,
+    // required to be set in messages from the server
+    uint32 id = 15;
+}
+
+// user_id/room_id tuple for certain commands that require both
+message UserInRoom {
+    // the lobby id of the user
+    uint32 user_id = 1;
+    // the lobby id of the room
+    uint32 room_id = 2;
+}
+
+// opaque game-mod messages
+message Game {
+    // specify the importance of this game message - informs the server
+    // how it can deal with failure cases
+    enum Importance {
+        GAME_IMPORTANCE_UNDEFINED = 0;
+        // the message may be safely dropped. users may experience undesirable
+        // behavior (e.g. jerky movement), but the game state will remain okay
+        // SHEDDABLE messages MAY be reordered to occur after CRITICAL messages
+        GAME_IMPORTANCE_SHEDDABLE = 1;
+        // the message may not be safely dropped. if it must be dropped, the
+        // server should take further action to rectify the game state, such
+        // as queueing the message or disconnecting the user. the server should
+        // inform the client that its message was rejected
+        GAME_IMPORTANCE_CRITICAL = 2;
+    }
+
+    // the content of the game message. only "understandable" by the mod,
+    // or the mod-to-app communication layer
+    string payload = 1;
+    // the importance of this message, to inform the server of how it should
+    // deal with failure cases
+    Importance importance = 2;
+
+    // set in c2s messages, but never in s2c messages. when present/non-empty,
+    // indicates that the server should cache the most recent payload for this
+    // key in memory and replay it to clients on reconnection. this is to
+    // ensure that game clients retain consistent in-game state across connection
+    // interruptions. expected to be an enum value that only has meaning to
+    // the mod, or maybe the NT client app. the server MAY impose limits on
+    // the payload size, number of cached keys, etc. to prevent abuse, however
+    // the only action the server can take if a client is in breach of these
+    // limits is to reject/destroy the game room
+    uint32 replay_key = 3;
+
+    // the user this message came from. ignored when received from client,
+    // required to be set in messages from the server
+    uint32 user_id = 15;
+}
+
+// server to client messages
+message Event {
+    // using repeated here allows us to concatenate multiple messages
+    // into a single websocket frame. for example, to batch many game
+    // movement updates into a single send
+
+    // in-game events
+    repeated Game game = 1;
+    // room-related events
+    repeated Room room = 2;
+    // user-related events
+    repeated User user = 3;
+    // messages to be displayed by the client
+    repeated Message message = 4;
+
+    // a list of lobby-ids to remove from the lobby state
+    repeated uint32 remove_users = 50;
+    // a list of room-ids to remove from the lobby state
+    repeated uint32 remove_rooms = 51;
+}
+
+// client to server messages
+message Command {
+    oneof type {
+        // 0-15: reserved for frequent messages that we may want to be compact about
+
+        // transmit this game message from this user to other players in the same room
+        Game game = 1;
+        // send a chat message from this user
+        string chat = 2;
+
+        // 20-39: lobby-related commands
+
+        // update this user's state (e.g. ready state, mods, seed...)
+        User update_user = 20;
+        // gracefully quit the lobby. mostly used to distinguish between
+        // a disconnection/crash and an intentional exit
+        bool quit = 21;
+
+        // 40-59: room-related commands
+
+        // request that the server provide the full list of rooms present in the lobby
+        bool list_rooms = 43;
+        // create a new room in the lobby
+        Room create_room = 44;
+        // update a room's state (mode, locked, flags, etc)
+        Room update_room = 45;
+        // delete a room
+        uint32 delete_room = 46;
+        // join a room
+        uint32 join_room = 47;
+        // leave a room
+        uint32 leave_room = 48;
+        // kick a user from a room
+        UserInRoom kick_from_room = 49;
+        // ban a user from a room
+        UserInRoom ban_from_room = 50;
+    }
+}
+
+// approximate translation from old to new:
+
+// ClientRoomCreate -> { command: { createRoom: { ...roomState } } }
+// ClientRoomUpdate -> { command: { updateRoom: { ...roomState } } }
+// ClientRoomFlagsUpdate -> { command: { updateRoom: { flags: "json data" } } }
+// ClientRoomDelete -> { command: { deleteRoom: 1 } }
+// ClientJoinRoom -> { command: { joinRoom: 1 } }
+// ClientLeaveRoom -> { command: { leaveRoom: 1 } }
+// ClientKickUser -> { command: { kickFromRoom: { userId: 1, roomId: 1 } } }
+// ClientBanUser -> { command: { banFromRoom: { userId: 1, roomId: 1 } } }
+// ClientReadyState -> { command: { updateUser: { ready: true } } }
+// ClientStartRun -> { command: { updateRoom: { runStatus: ROOM_RUN_STATUS_ACTIVE } } }
+// ClientRequestRoomList -> { command: { listRooms: true } }
+// ClietRunOver -> { command: { updateRoom: { runStatus: ROOM_RUN_STATUS_INACTIVE } } }
+// ClientChat -> { command: { chat: "text" } }
+
+// ServerRoomCreated -> { room: [ { ...roomState } ] }
+// ServerRoomCreateFailed -> { message: [ { type: MESSAGE_TYPE_ERROR, text: "say why it failed" } ] }
+// ServerRoomUpdated -> { room: [ { ...roomState } ] }
+// ServerRoomUpdateFailed -> { message: [ { type: MESSAGE_TYPE_ERROR, text: "say why it failed" } ] }
+// ServerRoomFlagsUpdated -> -> { room: [ { ...roomState } ] }
+// ServerRoomFlagsUpdateFailed -> { message: [ { type: MESSAGE_TYPE_ERROR, text: "say why it failed" } ] }
+// ServerRoomDeleted -> { removeRooms: [ id ] }
+// ServerJoinRoomSuccess -> { room: [ { id: 1, users: { type: LIST_TYPE_ADD, ids: [user.id] } } ] }
+// ServerUserJoinedRoom -> { room: [ { id: 1, users: { type: LIST_TYPE_ADD, ids: [user.id] } } ] }
+// ServerJoinRoomFailed -> { message: [ { type: MESSAGE_TYPE_ERROR, text: "say why it failed" } ] }
+// ServerUserLeftRoom -> {
+//    room: [ { id: 1, users: { type: LIST_TYPE_DEL, ids: [ user.id ] } } ]
+//    message: [ { type: MESSAGE_TYPE_SYSTEM, text: "user left room" } ]
+// }
+// ServerUserKicked -> {
+//    room: [ { id: 1, users: { type: LIST_TYPE_DEL, ids: [ user.id ] } } ]
+//    message: [ { type: MESSAGE_TYPE_SYSTEM, text: "user was kicked from room" } ]
+// }
+// ServerUserBanned -> {
+//    room: [ { id: 1, users: { type: LIST_TYPE_DEL, ids: [ user.id ] } } ]
+//    message: [ { type: MESSAGE_TYPE_SYSTEM, text: "user was banned from room" } ]
+// }
+// ServerUserReadyState -> { user: [ { id: 1, ready: true } ] }
+// ServerHostStart -> { room: [ { id: 1, runStatus: ROOM_RUN_STATUS_ACTIVE } ] }
+// ServerRoomList -> { room: [ ...roomStates ] }
+// ServerDisconnected -> {
+//    user: [ { id: 1, status: USER_STATUS_DISCONNECTED } ]
+//    message: [ { type: MESSAGE_TYPE_SYSTEM, text: "user was disconnected" } ]
+// }
+// ServerRoomAddToList -> { room: [ { ...roomState } ] }
+//
+// all c2s GameAction -> { game: { importance: GAME_IMPORTANCE_X, payload: "mod-specific json data" } }
+// all s2c GameAction -> game: [ { userId: 1, importance: GAME_IMPORTANCE_X, payload: "mod-specific json data" } ]
+//
+// not represented previously:
+// user connects -> { user: [ { ...userState } ] }
+//
+// users remain in the lobby when disconnected, but can be fully removed
+// when there are no longer any rooms that contain the user and they are
+// also disconnected, or at the server's discretion (e.g. after a timeout)
+// user is removed from lobby -> { removeUsers: [ 1 ] }
