@@ -88,12 +88,12 @@ export class LobbyState implements Handlers<LobbyActions> {
     const room = user.room();
 
     if (room) {
+      user.disconnected();
+
       // if the user _is_ in a room, we'll leave them in the list in case
       // they reconnect. if this user was the last active user in a room,
       // we'll destroy the entire room.
       this.gc(room);
-
-      user.disconnected();
     } else {
       this.users.delete(user.id);
       user.destroy();
@@ -178,10 +178,14 @@ export class LobbyState implements Handlers<LobbyActions> {
     user.room()?.part(user);
   }
   cKickUser(payload: NT.ClientKickUser, user: UserState) {
-    user.room()?.kick(user, this.users.get(payload.userId));
+    if (this.users.has(payload.userId)) {
+      user.room()?.kick(user, this.users.get(payload.userId)!);
+    }
   }
   cBanUser(payload: NT.ClientBanUser, user: UserState) {
-    user.room()?.kick(user, this.users.get(payload.userId));
+    if (this.users.has(payload.userId)) {
+      user.room()?.ban(user, this.users.get(payload.userId)!);
+    }
   }
   cReadyState(payload: NT.ClientReadyState, user: UserState) {
     user.updateReadyState(payload);

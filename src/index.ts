@@ -1,4 +1,4 @@
-import uWS, { us_listen_socket } from 'uWebsockets.js';
+import uWS, { us_listen_socket } from 'uWebSockets.js';
 
 import { ClientAuth } from './runtypes/client_auth';
 import { LobbyState } from './state/lobby';

@@ -1,4 +1,4 @@
-import { HttpRequest, HttpResponse, WebSocket, us_socket_context_t } from 'uWebsockets.js';
+import { HttpRequest, HttpResponse, WebSocket, us_socket_context_t } from 'uWebSockets.js';
 
 import { ClientAuth } from './runtypes/client_auth';
 

@@ -30,6 +30,6 @@
     "debug": "^4.3.4",
     "jsonwebtoken": "^9.0.2",
     "uuid": "^9.0.1",
-    "uWebsockets.js": "github:uNetworking/uWebSockets.js#v20.32.0"
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.34.0"
   }
 }

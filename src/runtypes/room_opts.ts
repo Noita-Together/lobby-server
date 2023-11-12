@@ -23,13 +23,13 @@ const createRoomOpts = {
 
 export const CreateRoomOpts = T.Object({
   ...createRoomOpts,
-  maxUsers: T.Integer({ minimum: 5, maximum: 30, multipleOf: 5 }),
+  maxUsers: T.Integer({ minimum: 1, maximum: 30 }),
 });
 export type CreateRoomOpts = Static<typeof CreateRoomOpts>;
 
 export const CreateBigRoomOpts = T.Object({
   ...createRoomOpts,
-  maxUsers: T.Integer({ minimum: 5, maximum: 120, multipleOf: 5 }),
+  maxUsers: T.Integer({ minimum: 1, maximum: 120 }),
 });
 export type CreateBigRoomOpts = Static<typeof CreateRoomOpts>;
 

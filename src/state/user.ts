@@ -1,4 +1,4 @@
-import { WebSocket } from 'uWebsockets.js';
+import { WebSocket } from 'uWebSockets.js';
 
 import * as NT from '../gen/messages_pb';
 import { M, Publishers } from '../util';
@@ -143,9 +143,9 @@ export class UserState implements IUser {
   }
 
   disconnected() {
-    if (this.currentRoom) {
-      this.currentRoom.part(this);
-    }
+    // if (this.currentRoom) {
+    //   this.currentRoom.part(this);
+    // }
     debug(this.id, this.name, 'disconnected');
     this.socket = null;
   }

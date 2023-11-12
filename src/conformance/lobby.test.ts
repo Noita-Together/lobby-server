@@ -1,4 +1,4 @@
-import { PartialMessage, PlainMessage } from '@bufbuild/protobuf';
+import { PartialMessage } from '@bufbuild/protobuf';
 import { Envelope } from '../gen/messages_pb';
 import { createJwtFns } from '../jwt';
 import { AuthProvider, ClientAuth } from '../runtypes/client_auth';
@@ -90,6 +90,8 @@ const createTestEnv = (createRoomId?: () => string, createChatId?: () => string)
   return { sentMessages, subscribed, lobby, users, testSocket, handleUpgrade, handleOpen, handleMessage, handleClose };
 };
 
+const uuidRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 describe('lobby conformance tests', () => {
   describe('socket open', () => {
     it('new connections get subscribed to the lobby', () => {
@@ -112,6 +114,174 @@ describe('lobby conformance tests', () => {
       // to a socket close event -- may be invalid/throw an error, but all
       // subscriptions will go away with the socket anyway
       expect(subscribed.get(user)?.has(lobby.topic)).toBe(true);
+    });
+  });
+
+  describe('non-mocked ids', () => {
+    it('generates uuids like normal', () => {
+      const { testSocket, handleOpen, handleMessage, sentMessages } = createTestEnv();
+      const user = testSocket('id', 'name');
+
+      handleOpen(user);
+
+      // create a room - should have a uuid for its id
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+
+      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomCreated?.case).toEqual('sRoomCreated');
+      if (sRoomCreated?.case === 'sRoomCreated') {
+        expect(sRoomCreated.value.id).toMatch(uuidRE);
+      }
+
+      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+
+      // send a chat - should have a uuid for its id
+      handleMessage(user, M.cChat({ message: 'hi' }).toBinary(), true);
+
+      const sChat = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sChat?.case).toEqual('sChat');
+      if (sChat?.case === 'sChat') {
+        expect(sChat.value.id).toMatch(uuidRE);
+      }
+
+      expect(sentMessages.length).toEqual(0);
+    });
+  });
+
+  describe('disconnect handling', () => {
+    it('cleans up a room when all active users have disconnected', () => {
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv();
+      const user = testSocket('id', 'name');
+
+      handleOpen(user);
+
+      // create a room - should have a uuid for its id
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+
+      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomCreated?.case).toEqual('sRoomCreated');
+      if (sRoomCreated?.case === 'sRoomCreated') {
+        expect(sRoomCreated.value.id).toMatch(uuidRE);
+      }
+
+      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+
+      handleClose(user, 1006, Buffer.from('test'));
+
+      const sRoomDeleted = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomDeleted?.case).toEqual('sRoomDeleted');
+      if (sRoomDeleted?.case === 'sRoomDeleted') {
+        expect(sRoomDeleted.value.id).toMatch(uuidRE);
+      }
+
+      expect(sentMessages.length).toEqual(0);
+    });
+
+    it('leaves a room active when at least one connected user is present', () => {
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv();
+      const user = testSocket('id', 'name');
+      const user2 = testSocket('id2', 'name2');
+
+      handleOpen(user);
+      handleOpen(user2);
+
+      // create a room - should have a uuid for its id
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+
+      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomCreated?.case).toEqual('sRoomCreated');
+      let roomId: string;
+      if (sRoomCreated?.case === 'sRoomCreated') {
+        expect(sRoomCreated.value.id).toMatch(uuidRE);
+        roomId = sRoomCreated.value.id!;
+      } else {
+        throw new Error('abort');
+      }
+
+      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+
+      handleMessage(user2, M.cJoinRoom({ id: roomId }).toBinary(), true);
+
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
+
+      handleClose(user, 1006, Buffer.from('test'));
+
+      expect(sentMessages).toEqual([]);
+    });
+
+    it('allows disconnected users to rejoin locked rooms. owner retains ownership', () => {
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv();
+      const owner = testSocket('ownerid', 'owner');
+      const player = testSocket('playerid', 'player');
+
+      handleOpen(owner);
+      handleOpen(player);
+
+      // create a room - should have a uuid for its id
+      handleMessage(owner, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+
+      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomCreated?.case).toEqual('sRoomCreated');
+      let roomId: string;
+      if (sRoomCreated?.case === 'sRoomCreated') {
+        expect(sRoomCreated.value.id).toMatch(uuidRE);
+        roomId = sRoomCreated.value.id!;
+      } else {
+        throw new Error('abort');
+      }
+
+      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      expect(sentMessages).toEqual([]);
+
+      handleMessage(player, M.cJoinRoom({ id: roomId }).toBinary(), true);
+
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
+      expect(sentMessages).toEqual([]);
+
+      handleMessage(owner, M.cRoomUpdate({ locked: true }).toBinary(), true);
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomUpdated');
+      expect(sentMessages).toEqual([]);
+
+      handleClose(owner, 1006, Buffer.from('test'));
+
+      // owner can rejoin
+      const owner2 = testSocket('ownerid', 'owner');
+      handleOpen(owner2);
+      handleMessage(owner2, M.cJoinRoom({ id: roomId }).toBinary(), true);
+
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
+      expect(sentMessages).toEqual([]);
+
+      handleClose(owner, 1006, Buffer.from('test'));
+
+      // player can rejoin
+      const player2 = testSocket('playerid', 'player');
+      handleOpen(player2);
+      handleMessage(player2, M.cJoinRoom({ id: roomId }).toBinary(), true);
+
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
+      expect(sentMessages).toEqual([]);
+
+      // owner can still change room properties = they are still the owner
+      handleMessage(owner, M.cRoomUpdate({ locked: false }).toBinary(), true);
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomUpdated');
+      expect(sentMessages).toEqual([]);
     });
   });
 
@@ -162,7 +332,7 @@ describe('lobby conformance tests', () => {
           user1,
           M.cRoomCreate({
             gamemode: 0,
-            maxUsers: 5,
+            maxUsers: 3,
             name: 'room',
           }),
         ],
@@ -175,7 +345,7 @@ describe('lobby conformance tests', () => {
             id: 'room1',
             gamemode: 0,
             locked: false,
-            maxUsers: 5,
+            maxUsers: 3,
             name: "user1's room",
             users: [
               {
@@ -197,7 +367,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               id: 'room1',
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               owner: 'user1',
               protected: false,
@@ -237,7 +407,7 @@ describe('lobby conformance tests', () => {
             gamemode: 0,
             id: 'room1',
             locked: false,
-            maxUsers: 5,
+            maxUsers: 3,
             name: "user1's room",
             users: [
               {
@@ -285,7 +455,7 @@ describe('lobby conformance tests', () => {
             user1,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
               password: 'foo',
             }),
@@ -306,7 +476,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               gamemode: 0,
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               users: [
                 {
@@ -328,7 +498,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: true,
@@ -350,7 +520,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               id: 'room1',
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               users: [
                 {
@@ -398,7 +568,7 @@ describe('lobby conformance tests', () => {
             user1,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
               password: 'foo',
             }),
@@ -419,7 +589,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               gamemode: 0,
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               users: [
                 {
@@ -441,7 +611,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: true,
@@ -468,7 +638,7 @@ describe('lobby conformance tests', () => {
             user1,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
               password: ' foo ',
             }),
@@ -482,7 +652,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               gamemode: 0,
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               users: [
                 {
@@ -504,7 +674,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: true,
@@ -524,7 +694,7 @@ describe('lobby conformance tests', () => {
             myndzi,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 50,
+              maxUsers: 30,
               name: 'troll room',
               password: ' foo ',
             }),
@@ -538,7 +708,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               gamemode: 0,
               locked: false,
-              maxUsers: 50,
+              maxUsers: 30,
               name: 'troll room',
               users: [
                 {
@@ -560,7 +730,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 50,
+                maxUsers: 30,
                 name: 'troll room',
                 owner: 'myndzi',
                 protected: true,
@@ -606,7 +776,7 @@ describe('lobby conformance tests', () => {
             user1,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
             }),
           ],
@@ -627,7 +797,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               gamemode: 0,
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               users: [
                 {
@@ -649,7 +819,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: false,
@@ -676,7 +846,7 @@ describe('lobby conformance tests', () => {
             user1,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
             }),
           ],
@@ -695,7 +865,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               gamemode: 0,
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               users: [
                 {
@@ -717,7 +887,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: false,
@@ -744,7 +914,7 @@ describe('lobby conformance tests', () => {
             user1,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
             }),
           ],
@@ -752,7 +922,7 @@ describe('lobby conformance tests', () => {
             user1,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
             }),
           ],
@@ -765,7 +935,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               gamemode: 0,
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               users: [
                 {
@@ -787,7 +957,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: false,
@@ -808,7 +978,7 @@ describe('lobby conformance tests', () => {
               id: 'room2',
               gamemode: 0,
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               users: [
                 {
@@ -830,7 +1000,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room2',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: false,
@@ -849,6 +1019,506 @@ describe('lobby conformance tests', () => {
         ({ user1 }) => [sm(null, user1, M.sJoinRoomFailed({ reason: "Room doesn't exist." }))],
       ),
     );
+
+    // name: 'cBanUser (success); join room (failure - banned)',
+    tests.push({
+      name: 'cBanUser (success); join room (failure - banned)',
+      clientMessages: (users) => [
+        ...u1create_u2join_no_password.clientMessages(users),
+        [
+          users.user1,
+          M.cBanUser({
+            userId: '2',
+          }),
+        ],
+        [
+          users.user2,
+          M.cJoinRoom({
+            id: 'room1',
+          }),
+        ],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2join_no_password.serverMessages(users),
+        sm('/room/room1', null, M.sUserBanned({ userId: '2' })),
+        sm(
+          '/room/room1',
+          null,
+          M.sChat({
+            id: 'chat1',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'user2 has been banned from this room.',
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sJoinRoomFailed({
+            reason: 'Banned from this room.',
+          }),
+        ),
+      ],
+    });
+
+    // name: 'cJoinRoom - failure (full)',
+    tests.push({
+      name: 'cJoinRoom - failure (full)',
+      clientMessages: (users) => [
+        ...u1create_no_password.clientMessages(users),
+        [
+          users.user1,
+          M.cRoomUpdate({
+            maxUsers: 1,
+          }),
+        ],
+        [users.user2, M.cJoinRoom({ id: 'room1' })],
+      ],
+      serverMessages: (users) => [
+        ...u1create_no_password.serverMessages(users),
+        sm(
+          '/room/room1',
+          null,
+          M.sRoomUpdated({
+            maxUsers: 1,
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sJoinRoomFailed({
+            reason: 'Room is full.',
+          }),
+        ),
+      ],
+    });
+
+    // name: 'cKickUser (success); join room (success)',
+    tests.push({
+      name: 'cKickUser (success); join room (success)',
+      clientMessages: (users) => [
+        ...u1create_u2join_no_password.clientMessages(users),
+        [
+          users.user1,
+          M.cKickUser({
+            userId: '2',
+          }),
+        ],
+        [
+          users.user2,
+          M.cJoinRoom({
+            id: 'room1',
+          }),
+        ],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2join_no_password.serverMessages(users),
+        sm('/room/room1', null, M.sUserKicked({ userId: '2' })),
+        sm(
+          '/room/room1',
+          null,
+          M.sChat({
+            id: 'chat1',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'user2 has been kicked from this room.',
+          }),
+        ),
+        sm(
+          '/room/room1',
+          users.user2,
+          M.sUserJoinedRoom({
+            userId: '2',
+            name: 'user2',
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sJoinRoomSuccess({
+            gamemode: 0,
+            id: 'room1',
+            locked: false,
+            maxUsers: 3,
+            name: "user1's room",
+            users: [
+              {
+                name: 'user1',
+                owner: true,
+                ready: false,
+                userId: '1',
+              },
+              {
+                name: 'user2',
+                owner: false,
+                ready: false,
+                userId: '2',
+              },
+            ],
+            password: '',
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sRoomFlagsUpdated({
+            flags: [],
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sUserReadyState({
+            userId: '1',
+            mods: [],
+            ready: false,
+          }),
+        ),
+      ],
+    });
+
+    // name: "cKickUser - failure (silent; not owner)",
+    tests.push({
+      name: 'cKickUser - failure (silent; not owner)',
+      clientMessages: (users) => [
+        ...u1create_u2join_no_password.clientMessages(users),
+        [
+          users.user2,
+          M.cKickUser({
+            userId: '2',
+          }),
+        ],
+      ],
+      serverMessages: (users) => [...u1create_u2join_no_password.serverMessages(users)],
+    });
+
+    // name: "cBanUser - failure (silent; not owner)",
+    tests.push({
+      name: 'cBanUser - failure (silent; not owner)',
+      clientMessages: (users) => [
+        ...u1create_u2join_no_password.clientMessages(users),
+        [
+          users.user2,
+          M.cBanUser({
+            userId: '2',
+          }),
+        ],
+      ],
+      serverMessages: (users) => [...u1create_u2join_no_password.serverMessages(users)],
+    });
+
+    // name: 'cJoinRoom - success (twice)',
+    tests.push({
+      name: 'cRoomUpdate - kick (success); join room (success)',
+      clientMessages: (users) => [
+        ...u1create_u2join_no_password.clientMessages(users),
+        [
+          users.user2,
+          M.cJoinRoom({
+            id: 'room1',
+          }),
+        ],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2join_no_password.serverMessages(users),
+        sm(
+          '/room/room1',
+          users.user2,
+          M.sUserJoinedRoom({
+            userId: '2',
+            name: 'user2',
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sJoinRoomSuccess({
+            gamemode: 0,
+            id: 'room1',
+            locked: false,
+            maxUsers: 3,
+            name: "user1's room",
+            users: [
+              {
+                name: 'user1',
+                owner: true,
+                ready: false,
+                userId: '1',
+              },
+              {
+                name: 'user2',
+                owner: false,
+                ready: false,
+                userId: '2',
+              },
+            ],
+            password: '',
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sRoomFlagsUpdated({
+            flags: [],
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sUserReadyState({
+            userId: '1',
+            mods: [],
+            ready: false,
+          }),
+        ),
+      ],
+    });
+
+    // name: 'cJoinRoom (room creator switching rooms) - success',
+    tests.push({
+      name: 'cJoinRoom (room creator switching rooms) - success',
+      clientMessages: (users) => [
+        ...u1create_no_password.clientMessages(users),
+        [
+          users.user2,
+          M.cRoomCreate({
+            gamemode: 0,
+            maxUsers: 3,
+            name: "user2's room",
+          }),
+        ],
+        [
+          users.user2,
+          M.cJoinRoom({
+            id: 'room1',
+          }),
+        ],
+      ],
+      serverMessages: (users) => [
+        ...u1create_no_password.serverMessages(users),
+        sm(
+          null,
+          users.user2,
+          M.sRoomCreated({
+            id: 'room2',
+            gamemode: 0,
+            locked: false,
+            maxUsers: 3,
+            name: "user2's room",
+            users: [
+              {
+                name: 'user2',
+                owner: true,
+                ready: false,
+                userId: '2',
+              },
+            ],
+            password: '',
+          }),
+        ),
+        sm(
+          'lobby',
+          users.user2,
+          M.sRoomAddToList({
+            room: {
+              curUsers: 1,
+              gamemode: 0,
+              id: 'room2',
+              locked: false,
+              maxUsers: 3,
+              name: "user2's room",
+              owner: 'user2',
+              protected: false,
+            },
+          }),
+        ),
+        sm(
+          '/room/room2',
+          null,
+          M.sRoomDeleted({
+            id: 'room2',
+          }),
+        ),
+        sm(
+          '/room/room1',
+          users.user2,
+          M.sUserJoinedRoom({
+            userId: '2',
+            name: 'user2',
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sJoinRoomSuccess({
+            gamemode: 0,
+            id: 'room1',
+            locked: false,
+            maxUsers: 3,
+            name: "user1's room",
+            users: [
+              {
+                name: 'user1',
+                owner: true,
+                ready: false,
+                userId: '1',
+              },
+              {
+                name: 'user2',
+                owner: false,
+                ready: false,
+                userId: '2',
+              },
+            ],
+            password: '',
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sRoomFlagsUpdated({
+            flags: [],
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sUserReadyState({
+            userId: '1',
+            mods: [],
+            ready: false,
+          }),
+        ),
+      ],
+    });
+
+    // name: 'cJoinRoom (room member switching rooms) - success',
+    tests.push({
+      name: 'cJoinRoom (room member switching rooms) - success',
+      clientMessages: (users) => [
+        ...u1create_u2join_no_password.clientMessages(users),
+        [
+          users.myndzi,
+          M.cRoomCreate({
+            gamemode: 0,
+            maxUsers: 3,
+            name: 'foo',
+          }),
+        ],
+        [
+          users.user2,
+          M.cJoinRoom({
+            id: 'room2',
+          }),
+        ],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2join_no_password.serverMessages(users),
+        sm(
+          null,
+          users.myndzi,
+          M.sRoomCreated({
+            id: 'room2',
+            gamemode: 0,
+            locked: false,
+            maxUsers: 3,
+            name: 'foo',
+            users: [
+              {
+                name: 'myndzi',
+                owner: true,
+                ready: false,
+                userId: '42069',
+              },
+            ],
+            password: '',
+          }),
+        ),
+        sm(
+          'lobby',
+          users.myndzi,
+          M.sRoomAddToList({
+            room: {
+              curUsers: 1,
+              gamemode: 0,
+              id: 'room2',
+              locked: false,
+              maxUsers: 3,
+              name: 'foo',
+              owner: 'myndzi',
+              protected: false,
+            },
+          }),
+        ),
+        sm(
+          '/room/room1',
+          null,
+          M.sUserLeftRoom({
+            userId: '2',
+          }),
+        ),
+        sm(
+          '/room/room1',
+          null,
+          M.sChat({
+            id: 'chat1',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'user2 has left.',
+          }),
+        ),
+        sm(
+          '/room/room2',
+          users.user2,
+          M.sUserJoinedRoom({
+            userId: '2',
+            name: 'user2',
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sJoinRoomSuccess({
+            gamemode: 0,
+            id: 'room2',
+            locked: false,
+            maxUsers: 3,
+            name: 'foo',
+            users: [
+              {
+                name: 'myndzi',
+                owner: true,
+                ready: false,
+                userId: '42069',
+              },
+              {
+                name: 'user2',
+                owner: false,
+                ready: false,
+                userId: '2',
+              },
+            ],
+            password: '',
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sRoomFlagsUpdated({
+            flags: [],
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sUserReadyState({
+            userId: '42069',
+            mods: [],
+            ready: false,
+          }),
+        ),
+      ],
+    });
 
     // 'cLeaveRoom - success',
     tests.push({
@@ -873,6 +1543,25 @@ describe('lobby conformance tests', () => {
       ],
     });
 
+    // 'cLeaveRoom - success (owner)',
+    tests.push({
+      name: 'cLeaveRoom - success (owner)',
+      clientMessages: (users) => [
+        ...u1create_u2join_no_password.clientMessages(users),
+        [users.user1, M.cLeaveRoom({ userId: 'unused' })],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2join_no_password.serverMessages(users),
+        sm(
+          '/room/room1',
+          null,
+          M.sRoomDeleted({
+            id: 'room1',
+          }),
+        ),
+      ],
+    });
+
     // 'cChat, user in room - sender receives nothing, others receive chat',
     tests.push(
       t(
@@ -882,7 +1571,7 @@ describe('lobby conformance tests', () => {
             user1,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
             }),
           ],
@@ -896,7 +1585,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               gamemode: 0,
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: "user1's room",
               users: [
                 {
@@ -918,7 +1607,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: false,
@@ -958,7 +1647,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: false,
@@ -970,7 +1659,7 @@ describe('lobby conformance tests', () => {
       ],
     });
 
-    // name: 'cRoomUpdate (lock) - success',
+    // name: 'cRoomUpdate (lock) - success; cJoinRoom - fail (locked)',
     tests.push({
       name: 'cRoomUpdate (lock) - success',
       clientMessages: (users) => [
@@ -981,6 +1670,12 @@ describe('lobby conformance tests', () => {
             locked: true,
           }),
         ],
+        [
+          users.user2,
+          M.cJoinRoom({
+            id: 'room1',
+          }),
+        ],
       ],
       serverMessages: (users) => [
         ...u1create_no_password.serverMessages(users),
@@ -989,6 +1684,13 @@ describe('lobby conformance tests', () => {
           null,
           M.sRoomUpdated({
             locked: true,
+          }),
+        ),
+        sm(
+          null,
+          users.user2,
+          M.sJoinRoomFailed({
+            reason: 'Room is locked.',
           }),
         ),
       ],
@@ -1074,7 +1776,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: "user1's room",
                 owner: 'user1',
                 protected: true,
@@ -1143,7 +1845,7 @@ describe('lobby conformance tests', () => {
             myndzi,
             M.cRoomCreate({
               gamemode: 0,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
             }),
           ],
@@ -1164,7 +1866,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               gamemode: 0,
               locked: false,
-              maxUsers: 5,
+              maxUsers: 3,
               name: 'room',
               users: [
                 {
@@ -1186,7 +1888,7 @@ describe('lobby conformance tests', () => {
                 gamemode: 0,
                 id: 'room1',
                 locked: false,
-                maxUsers: 5,
+                maxUsers: 3,
                 name: 'room',
                 owner: 'myndzi',
                 protected: false,
@@ -1210,7 +1912,7 @@ describe('lobby conformance tests', () => {
                   gamemode: 0,
                   id: 'room1',
                   locked: false,
-                  maxUsers: 5,
+                  maxUsers: 3,
                   name: 'troll room',
                   owner: 'myndzi',
                   protected: false,
@@ -1266,7 +1968,7 @@ describe('lobby conformance tests', () => {
             gamemode: 0,
             id: 'room1',
             locked: false,
-            maxUsers: 5,
+            maxUsers: 3,
             name: "user1's room",
             users: [
               {
@@ -1329,7 +2031,7 @@ describe('lobby conformance tests', () => {
     });
 
     // name: 'cReadyState (mods, ready) - success; cached readystate sent',
-    tests.push({
+    const u1create_u2ready_u3join: test = {
       name: 'cReadyState (mods, ready) - success; cached readystate sent',
       clientMessages: (users) => [
         ...u1create_u2join_no_password.clientMessages(users),
@@ -1373,7 +2075,7 @@ describe('lobby conformance tests', () => {
             gamemode: 0,
             id: 'room1',
             locked: false,
-            maxUsers: 5,
+            maxUsers: 3,
             name: "user1's room",
             users: [
               {
@@ -1424,6 +2126,161 @@ describe('lobby conformance tests', () => {
           }),
         ),
       ],
+    };
+    tests.push(u1create_u2ready_u3join);
+
+    // name: 'cStartRun - failure (not owner)',
+    tests.push({
+      name: 'cStartRun - failure (not owner)',
+      clientMessages: (users) => [
+        ...u1create_u2ready_u3join.clientMessages(users),
+        [users.user2, M.cStartRun({ forced: true /* ignored*/ })],
+      ],
+      serverMessages: (users) => [...u1create_u2ready_u3join.serverMessages(users)],
+    });
+
+    // name: 'cStartRun - success',
+    tests.push({
+      name: 'cStartRun - success',
+      clientMessages: (users) => [
+        ...u1create_u2ready_u3join.clientMessages(users),
+        [users.user1, M.cStartRun({ forced: true /* ignored*/ })],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2ready_u3join.serverMessages(users),
+        sm('/room/room1', null, M.sHostStart({ forced: false /* always sent*/ })),
+      ],
+    });
+
+    // name: "cReadyState - run in progress - start sent when mods haven't changed",
+    tests.push({
+      name: "cReadyState - run in progress - start sent when mods haven't changed",
+      clientMessages: (users) => [
+        ...u1create_u2ready_u3join.clientMessages(users),
+        [users.user1, M.cStartRun({ forced: true /* ignored*/ })],
+        [users.myndzi, M.cReadyState({ ready: true, mods: [] })],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2ready_u3join.serverMessages(users),
+        sm('/room/room1', null, M.sHostStart({ forced: false /* always sent*/ })),
+        sm(
+          '/room/room1',
+          null,
+          M.sUserReadyState({
+            userId: '42069',
+            mods: [],
+            ready: true,
+          }),
+        ),
+        sm(null, users.myndzi, M.sHostStart({ forced: false })),
+      ],
+    });
+
+    // name: "cReadyState - run in progress - start NOT sent when mods HAVE changed",
+    tests.push({
+      name: 'cReadyState - run in progress - start NOT sent when mods HAVE changed',
+      clientMessages: (users) => [
+        ...u1create_u2ready_u3join.clientMessages(users),
+        [users.user1, M.cStartRun({ forced: true /* ignored*/ })],
+        [users.myndzi, M.cReadyState({ ready: true, mods: ['cheat mod'] })],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2ready_u3join.serverMessages(users),
+        sm('/room/room1', null, M.sHostStart({ forced: false /* always sent*/ })),
+        sm(
+          '/room/room1',
+          null,
+          M.sUserReadyState({
+            userId: '42069',
+            mods: ['cheat mod'],
+            ready: true,
+          }),
+        ),
+      ],
+    });
+
+    // name: "cReadyState - run in progress - start sent when mods are changed back",
+    tests.push({
+      name: 'cReadyState - run in progress - start sent when mods are changed back',
+      clientMessages: (users) => [
+        ...u1create_u2ready_u3join.clientMessages(users),
+        [users.user1, M.cStartRun({ forced: true /* ignored*/ })],
+        [users.myndzi, M.cReadyState({ ready: true, mods: ['cheat mod'] })],
+        [users.myndzi, M.cReadyState({ ready: true, mods: [] })],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2ready_u3join.serverMessages(users),
+        sm('/room/room1', null, M.sHostStart({ forced: false /* always sent*/ })),
+        sm(
+          '/room/room1',
+          null,
+          M.sUserReadyState({
+            userId: '42069',
+            mods: ['cheat mod'],
+            ready: true,
+          }),
+        ),
+        sm(
+          '/room/room1',
+          null,
+          M.sUserReadyState({
+            userId: '42069',
+            mods: [],
+            ready: true,
+          }),
+        ),
+        sm(null, users.myndzi, M.sHostStart({ forced: false })),
+      ],
+    });
+
+    // name: "cReadyState - started then ended - start NOT sent",
+    tests.push({
+      name: 'cReadyState - started then ended - start NOT sent',
+      clientMessages: (users) => [
+        ...u1create_u2ready_u3join.clientMessages(users),
+        [users.user1, M.cStartRun({ forced: true /* ignored*/ })],
+        [users.user1, M.cRunOver({ idk: true /* ignored*/ })],
+        [users.myndzi, M.cReadyState({ ready: true, mods: [] })],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2ready_u3join.serverMessages(users),
+        sm('/room/room1', null, M.sHostStart({ forced: false /* always sent*/ })),
+        // no message sent for run over
+        sm(
+          '/room/room1',
+          null,
+          M.sUserReadyState({
+            userId: '42069',
+            mods: [],
+            ready: true,
+          }),
+        ),
+      ],
+    });
+
+    // name: "cRunOver - failure (not owner) - indirect test via readystate update",
+    tests.push({
+      name: 'cRunOver - failure (not owner) - indirect test via readystate update',
+      clientMessages: (users) => [
+        ...u1create_u2ready_u3join.clientMessages(users),
+        [users.user1, M.cStartRun({ forced: true /* ignored*/ })],
+        [users.user2, M.cRunOver({ idk: true /* ignored */ })],
+        [users.myndzi, M.cReadyState({ ready: true, mods: [] })],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2ready_u3join.serverMessages(users),
+        sm('/room/room1', null, M.sHostStart({ forced: false /* always sent*/ })),
+        sm(
+          '/room/room1',
+          null,
+          M.sUserReadyState({
+            userId: '42069',
+            mods: [],
+            ready: true,
+          }),
+        ),
+        sm(null, users.myndzi, M.sHostStart({ forced: false })),
+      ],
     });
 
     it.each(tests)('$name', ({ clientMessages, serverMessages }) => {
@@ -1449,7 +2306,25 @@ describe('lobby conformance tests', () => {
         handleMessage(user, message.toBinary(), true);
       }
 
-      expect(sentMessages).toEqual(serverMessages(users));
+      const expectedMessages = serverMessages(users);
+      expect(sentMessages.map((v) => v.message.kind?.value?.action?.case)).toEqual(
+        expectedMessages.map((v) => v.message.kind?.value?.action?.case),
+      );
+      if (sentMessages.length === expectedMessages.length) {
+        for (const [idx, sent] of sentMessages.entries()) {
+          const exp = expectedMessages[idx];
+          const sentM = sent.message.kind?.value?.action?.case;
+          const expM = sent.message.kind?.value?.action?.case;
+          try {
+            expect(sent).toStrictEqual(exp);
+          } catch (e) {
+            if (e instanceof Error) {
+              e.message = `Expected: ${expM} Got: ${sentM}\n\n${e.message}`;
+            }
+            throw e;
+          }
+        }
+      }
     });
   });
 });

@@ -57,7 +57,7 @@ export class RoomState implements Handlers<GameActions> {
 
   private users = new Set<UserState>();
   private bannedUsers = new Set<string>();
-  private lastMods = new WeakMap<UserState, string>();
+  private allowedMods = new WeakMap<UserState, string>();
 
   private name: string;
   private gamemode: number;
@@ -239,8 +239,8 @@ export class RoomState implements Handlers<GameActions> {
     this.broadcast(M.sUserReadyState({ userId: actor.id, ...payload }));
 
     if (this.inProgress && payload.ready) {
-      const lastMods = this.lastMods.get(actor);
-      if (lastMods !== actor.mods()) return;
+      const allowedMods = this.allowedMods.get(actor);
+      if (allowedMods !== actor.mods()) return;
       actor.send(M.sHostStart({ forced: false }));
     }
   }
@@ -253,7 +253,7 @@ export class RoomState implements Handlers<GameActions> {
 
     // store the mods that users had at the start of a run
     for (const user of this.users) {
-      this.lastMods.set(user, user.mods());
+      this.allowedMods.set(user, user.mods());
     }
 
     this.inProgress = true;
@@ -287,11 +287,13 @@ export class RoomState implements Handlers<GameActions> {
       else if (this.password && this.password !== password) reason = 'Bad password.';
       else if (this.locked) reason = 'Room is locked.';
     } else if (room !== this) {
-      // user got disconnected while in a room, but is trying to join a different
+      // user (probably) got disconnected while in a room, but is trying to join a different
       // room. delete the old room if user is the owner, otherwise just leave
-      room.delete(user) || user.parted(room);
+      room.delete(user) || room.part(user);
     } else {
-      // user got disconnected while in a room, and is rejoining it. allow them in
+      // user (probably) got disconnected while in a room, and is rejoining it. allow them in
+      // the NT app currently provides no way to join a room without leaving the
+      // current room, but could in the future. if so, this assumption changes
     }
 
     if (reason) {
@@ -330,6 +332,7 @@ export class RoomState implements Handlers<GameActions> {
     pb: T,
     message: string,
   ) {
+    /* istanbul ignore next */
     if (!target) {
       // this should never happen, but the return type of (Map)users.get(userid) is _technically_
       // UserState|undefined, so if some state gets wrong we want to know about it
@@ -342,54 +345,51 @@ export class RoomState implements Handlers<GameActions> {
     // ignore these
     if (actor !== null && this.owner !== actor) return;
 
-    if (this.owner === target) {
-      // when the owner leaves the room, destroy it
-      this.destroy();
-    } else {
-      // otherwise, remove user from room and notify everybody
-      this.users.delete(target);
+    // when the owner leaves the room, destroy it
+    if (this.delete(target)) return;
 
-      // update leaving user state and subscriptions before sending the chat update
-      target.parted(this);
+    // otherwise, remove user from room and notify everybody
+    this.users.delete(target);
 
-      // send the control message confirming the removal
-      this.broadcast(pb({ userId: target.id }));
+    // update leaving user state and subscriptions before sending the chat update
+    target.parted(this);
 
-      // send a chat message to the room
-      this.broadcast(this.chat(SYSTEM_USER, `${target.name} ${message}.`));
-    }
+    // send the control message confirming the removal
+    this.broadcast(pb({ userId: target.id }));
+
+    // send a chat message to the room
+    this.broadcast(this.chat(SYSTEM_USER, `${target.name} ${message}`));
 
     // this.playerPositions.updatePlayers(this.users);
     debug(this.id, 'user left', target.id, target.name, message);
   }
 
   part(actor: UserState) {
-    this.removeUser(null, actor, M.sUserLeftRoom, 'has left');
+    this.removeUser(null, actor, M.sUserLeftRoom, 'has left.');
   }
 
-  kick(actor: UserState, target?: UserState) {
-    this.removeUser(actor, target, M.sUserKicked, 'has been kicked from this room');
+  kick(actor: UserState, target: UserState) {
+    this.removeUser(actor, target, M.sUserKicked, 'has been kicked from this room.');
   }
 
-  ban(actor: UserState, target?: UserState) {
-    this.removeUser(actor, target, M.sUserBanned, 'has been banned from this room');
+  ban(actor: UserState, target: UserState) {
+    this.bannedUsers.add(target.id);
+    this.removeUser(actor, target, M.sUserBanned, 'has been banned from this room.');
   }
 
+  // thin wrapper around destroy to check permission
   delete(actor: UserState): boolean {
     // no error for this one either if invalid
     if (this.owner !== actor) return false;
 
-    // must send this message before calling this.destroy() - otherwise,
-    // the users will have been unsubscribed from the topic and will not
-    // receive the message
-    this.broadcast(M.sRoomDeleted({ id: this.id }));
-
     this.destroy();
-    debug(this.id, 'deleted');
     return true;
   }
 
+  // tear down a room and its state
   destroy() {
+    this.broadcast(M.sRoomDeleted({ id: this.id }));
+
     // this.playerPositions.destroy();
 
     for (const user of this.users) {
@@ -401,6 +401,7 @@ export class RoomState implements Handlers<GameActions> {
     this.users.clear();
 
     this.lobby.roomDestroyed(this);
+    debug(this.id, 'destroyed');
   }
 
   //// message handlers ////

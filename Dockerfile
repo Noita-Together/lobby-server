@@ -10,9 +10,17 @@ COPY proto/ ./proto/
 RUN npx buf generate proto
 COPY tsconfig.json .
 COPY src/ ./src/
+
+# run tests
+COPY jest.config.js .
+RUN npx jest
+
+# build
 RUN npx tsup src/index.ts
+
+# remove unnecessary dev/runtime dependencies
 RUN npm prune --omit=dev
-RUN find 'node_modules/uWebsockets.js' -name '*.node' -not -name "$UWS_TARGET_LIB" -delete
+RUN find 'node_modules/uWebSockets.js' -name '*.node' -not -name "$UWS_TARGET_LIB" -delete
 
 FROM node:20-alpine
 
