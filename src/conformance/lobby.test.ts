@@ -12,7 +12,7 @@ type sentMessage = {
   message: PartialMessage<Envelope>;
 };
 
-const createTestEnv = (createRoomId?: () => string, createChatId?: () => string) => {
+const createTestEnv = (devMode: boolean, createRoomId?: () => string, createChatId?: () => string) => {
   const debug = () => {};
 
   const sentMessages: sentMessage[] = [];
@@ -28,7 +28,7 @@ const createTestEnv = (createRoomId?: () => string, createChatId?: () => string)
     createChatId,
   );
 
-  const lobby = new LobbyState(publishers, createRoomId, createChatId);
+  const lobby = new LobbyState(publishers, devMode, createRoomId, createChatId);
 
   const { signToken, verifyToken } = createJwtFns('test secret', 'test refresh');
 
@@ -95,7 +95,7 @@ const uuidRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 describe('lobby conformance tests', () => {
   describe('socket open', () => {
     it('new connections get subscribed to the lobby', () => {
-      const { testSocket, handleOpen, subscribed, lobby } = createTestEnv();
+      const { testSocket, handleOpen, subscribed, lobby } = createTestEnv(false);
       const user = testSocket('id', 'name');
 
       handleOpen(user);
@@ -105,7 +105,7 @@ describe('lobby conformance tests', () => {
 
   describe('socket close', () => {
     it('closed connections clean up gracefully', () => {
-      const { testSocket, handleOpen, handleClose, subscribed, lobby } = createTestEnv();
+      const { testSocket, handleOpen, handleClose, subscribed, lobby } = createTestEnv(false);
       const user = testSocket('id', 'name');
       handleOpen(user);
       handleClose(user, 1006, Buffer.from('test'));
@@ -119,7 +119,7 @@ describe('lobby conformance tests', () => {
 
   describe('non-mocked ids', () => {
     it('generates uuids like normal', () => {
-      const { testSocket, handleOpen, handleMessage, sentMessages } = createTestEnv();
+      const { testSocket, handleOpen, handleMessage, sentMessages } = createTestEnv(false);
       const user = testSocket('id', 'name');
 
       handleOpen(user);
@@ -135,6 +135,7 @@ describe('lobby conformance tests', () => {
 
       const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
       expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      expect(sentMessages).toEqual([]);
 
       // send a chat - should have a uuid for its id
       handleMessage(user, M.cChat({ message: 'hi' }).toBinary(), true);
@@ -145,13 +146,13 @@ describe('lobby conformance tests', () => {
         expect(sChat.value.id).toMatch(uuidRE);
       }
 
-      expect(sentMessages.length).toEqual(0);
+      expect(sentMessages).toEqual([]);
     });
   });
 
   describe('disconnect handling', () => {
     it('cleans up a room when all active users have disconnected', () => {
-      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv();
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv(false);
       const user = testSocket('id', 'name');
 
       handleOpen(user);
@@ -167,6 +168,7 @@ describe('lobby conformance tests', () => {
 
       const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
       expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      expect(sentMessages).toEqual([]);
 
       handleClose(user, 1006, Buffer.from('test'));
 
@@ -176,11 +178,11 @@ describe('lobby conformance tests', () => {
         expect(sRoomDeleted.value.id).toMatch(uuidRE);
       }
 
-      expect(sentMessages.length).toEqual(0);
+      expect(sentMessages).toEqual([]);
     });
 
     it('leaves a room active when at least one connected user is present', () => {
-      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv();
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv(false);
       const user = testSocket('id', 'name');
       const user2 = testSocket('id2', 'name2');
 
@@ -202,6 +204,7 @@ describe('lobby conformance tests', () => {
 
       const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
       expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      expect(sentMessages).toEqual([]);
 
       handleMessage(user2, M.cJoinRoom({ id: roomId }).toBinary(), true);
 
@@ -216,7 +219,7 @@ describe('lobby conformance tests', () => {
     });
 
     it('allows disconnected users to rejoin locked rooms. owner retains ownership', () => {
-      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv();
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv(false);
       const owner = testSocket('ownerid', 'owner');
       const player = testSocket('playerid', 'player');
 
@@ -285,6 +288,36 @@ describe('lobby conformance tests', () => {
     });
   });
 
+  describe('dev mode', () => {
+    it('rejects room creation from non-devs', () => {
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv(true);
+      const user = testSocket('id', 'name');
+      const dev = testSocket('id', 'myndzi');
+
+      handleOpen(user);
+      handleOpen(dev);
+
+      // create a room - should have a uuid for its id
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+
+      const sRoomCreateFailed = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomCreateFailed?.case).toEqual('sRoomCreateFailed');
+      expect(sentMessages).toEqual([]);
+
+      handleMessage(dev, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: 'dev room' }).toBinary(), true);
+
+      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomCreated?.case).toEqual('sRoomCreated');
+      if (sRoomCreated?.case === 'sRoomCreated') {
+        expect(sRoomCreated.value.id).toMatch(uuidRE);
+      }
+
+      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
+      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      expect(sentMessages).toEqual([]);
+    });
+  });
+
   describe('message handlers', () => {
     type clientMessage = [user: ClientAuthWebSocket, message: Envelope];
     const sm = <E extends PartialMessage<Envelope>>(
@@ -314,6 +347,8 @@ describe('lobby conformance tests', () => {
     });
 
     const tests: test[] = [];
+
+    ///// lobby messages /////
 
     // 'cChat, user not in room - invalid; nothing broadcast',
     tests.push(
@@ -1628,6 +1663,62 @@ describe('lobby conformance tests', () => {
       ),
     );
 
+    // 'cChat - silent failure (empty message)',
+    tests.push(
+      t(
+        'cChat - silent failure (empty message)',
+        ({ user1 }) => [
+          [
+            user1,
+            M.cRoomCreate({
+              gamemode: 0,
+              maxUsers: 3,
+              name: 'room',
+            }),
+          ],
+          [user1, M.cChat({ message: '' })],
+        ],
+        ({ user1 }) => [
+          sm(
+            null,
+            user1,
+            M.sRoomCreated({
+              id: 'room1',
+              gamemode: 0,
+              locked: false,
+              maxUsers: 3,
+              name: "user1's room",
+              users: [
+                {
+                  name: 'user1',
+                  owner: true,
+                  ready: false,
+                  userId: '1',
+                },
+              ],
+              password: '',
+            }),
+          ),
+          sm(
+            'lobby',
+            user1,
+            M.sRoomAddToList({
+              room: {
+                curUsers: 1,
+                gamemode: 0,
+                id: 'room1',
+                locked: false,
+                maxUsers: 3,
+                name: "user1's room",
+                owner: 'user1',
+                protected: false,
+              },
+            }),
+          ),
+        ],
+      ),
+    );
+
     // name: 'cRequestRoomList - success',
     tests.push({
       name: 'cRequestRoomList - success',
@@ -2140,7 +2231,7 @@ describe('lobby conformance tests', () => {
     });
 
     // name: 'cStartRun - success',
-    tests.push({
+    const u1create_u2ready_u1start: test = {
       name: 'cStartRun - success',
       clientMessages: (users) => [
         ...u1create_u2ready_u3join.clientMessages(users),
@@ -2150,7 +2241,8 @@ describe('lobby conformance tests', () => {
         ...u1create_u2ready_u3join.serverMessages(users),
         sm('/room/room1', null, M.sHostStart({ forced: false /* always sent*/ })),
       ],
-    });
+    };
+    tests.push(u1create_u2ready_u1start);
 
     // name: "cReadyState - run in progress - start sent when mods haven't changed",
     tests.push({
@@ -2283,10 +2375,138 @@ describe('lobby conformance tests', () => {
       ],
     });
 
+    // name: "/endrun - indirect test via readystate update",
+    tests.push({
+      name: '/endrun - indirect test via readystate update',
+      clientMessages: (users) => [
+        ...u1create_u2ready_u3join.clientMessages(users),
+        [users.user1, M.cStartRun({ forced: true /* ignored*/ })],
+        [users.user1, M.cChat({ message: '/endrun' })],
+        [users.myndzi, M.cReadyState({ ready: true, mods: [] })],
+      ],
+      serverMessages: (users) => [
+        ...u1create_u2ready_u3join.serverMessages(users),
+        sm('/room/room1', null, M.sHostStart({ forced: false /* always sent*/ })),
+        sm(
+          '/room/room1',
+          null,
+          M.sUserReadyState({
+            userId: '42069',
+            mods: [],
+            ready: true,
+          }),
+        ),
+      ],
+    });
+
+    ///// game messages /////
+
+    type gmTest = ['all' | 'others' | 'toHost' | 'byHost' | 'never', Envelope];
+
+    const gameMessages: gmTest[] = [
+      ['others', M.cPlayerUpdate({ curHp: 123 })],
+      ['never', M.cPlayerUpdateInventory({ spells: [{ index: 1 }], wands: [], items: [] })],
+      ['byHost', M.cHostItemBank({ gold: 1, items: [], objects: [], spells: [], wands: [] })],
+      ['byHost', M.cHostUserTake({ id: '1', success: true, userId: '123' })],
+      ['byHost', M.cHostUserTakeGold({ amount: 1, success: true, userId: '123' })],
+      ['all', M.cPlayerAddGold({ amount: 1 })],
+      ['toHost', M.cPlayerTakeGold({ amount: 1 })],
+      ['all', M.cPlayerAddItem({ item: { case: 'spells', value: { list: [] } } })],
+      ['toHost', M.cPlayerTakeItem({ id: '1' })],
+      ['others', M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } })],
+      ['others', M.cNemesisAbility({ gameId: '1' })],
+      ['others', M.cNemesisPickupItem({ gameId: '1' })],
+      ['others', M.cPlayerNewGamePlus({ amount: 1 })],
+      ['others', M.cPlayerSecretHourglass({ material: 'foo' })],
+      ['all', M.cCustomModEvent({ payload: 'ohi' })],
+      ['others', M.cAngerySteve({ idk: true })],
+      ['others', M.cRespawnPenalty({ deaths: 1 })],
+      ['others', M.cPlayerDeath({ isWin: true })],
+      ['others', M.playerMove({ frames: [{ x: 1, y: 2 }] })],
+      ['never', M.playerMove({ userId: 'disallowed from client', frames: [{ x: 1, y: 2 }] })],
+    ];
+
+    const transformC2S = (env: Envelope, userId: string) => {
+      const action = env.kind.value!.action;
+      if (action.case === 'playerMove') {
+        return new Envelope({
+          kind: {
+            case: 'gameAction',
+            value: {
+              action: {
+                case: 'playerMove',
+                value: {
+                  ...action.value,
+                  userId,
+                },
+              },
+            },
+          },
+        });
+      }
+      return new Envelope({
+        kind: {
+          case: env.kind.case!,
+          value: {
+            action: {
+              case: action.case!.replace(/^c/, 's'),
+              value: {
+                userId,
+                ...action.value!,
+              },
+            },
+          },
+        },
+      } as any);
+    };
+
+    for (const [type, env] of gameMessages) {
+      const name = env.kind.value!.action.case;
+      tests.push({
+        name: `${name} - silent failure (inactive run)`,
+        clientMessages: (users) => [...u1create_u2join_no_password.clientMessages(users), [users.user1, env]],
+        serverMessages: (users) => [...u1create_u2join_no_password.serverMessages(users)],
+      });
+
+      if (type === 'never') {
+        tests.push({
+          name: `${name} - ${type}`,
+          clientMessages: (users) => [...u1create_u2ready_u1start.clientMessages(users), [users.user2, env]],
+          serverMessages: (users) => [...u1create_u2ready_u1start.serverMessages(users)],
+        });
+        continue;
+      }
+
+      tests.push({
+        name: `${name} - ${type}`,
+        clientMessages: (users) => [
+          ...u1create_u2ready_u1start.clientMessages(users),
+          [type === 'byHost' ? users.user1 : users.user2, env],
+        ],
+        serverMessages: (users) => [
+          ...u1create_u2ready_u1start.serverMessages(users),
+          sm(
+            type === 'toHost' ? null : '/room/room1',
+            type === 'all' || type === 'byHost' ? null : type === 'toHost' ? users.user1 : users.user2,
+            transformC2S(env, type === 'byHost' ? '1' : '2'),
+          ),
+        ],
+      });
+
+      if (type === 'byHost') {
+        tests.push({
+          name: `${name} - ${type} - silent failure (not owner)`,
+          clientMessages: (users) => [...u1create_u2ready_u1start.clientMessages(users), [users.user2, env]],
+          serverMessages: (users) => [...u1create_u2ready_u1start.serverMessages(users)],
+        });
+      }
+    }
+
     it.each(tests)('$name', ({ clientMessages, serverMessages }) => {
       let roomId = 1;
       let chatId = 1;
       const env = createTestEnv(
+        false,
         () => `room${roomId++}`,
         () => `chat${chatId++}`,
       );

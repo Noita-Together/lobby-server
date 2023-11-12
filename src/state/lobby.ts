@@ -26,6 +26,7 @@ export class LobbyState implements Handlers<LobbyActions> {
 
   constructor(
     publishers: Publishers,
+    private devMode: boolean,
     private createRoomId?: () => string,
     private createChatId?: () => string,
   ) {
@@ -139,6 +140,7 @@ export class LobbyState implements Handlers<LobbyActions> {
         ...payload,
       },
       publishers: this.publishers,
+      devMode: this.devMode,
     });
 
     if (room) {

@@ -90,7 +90,7 @@ message PlayerFrame {
 message PlayerMove {
     repeated PlayerFrame frames = 1;
 
-    string user_id = 15;
+    optional string user_id = 15;
 }
 
 message PlayerPosition {

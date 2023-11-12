@@ -465,9 +465,9 @@ export class PlayerMove extends Message<PlayerMove> {
   frames: PlayerFrame[] = [];
 
   /**
-   * @generated from field: string user_id = 15;
+   * @generated from field: optional string user_id = 15;
    */
-  userId = "";
+  userId?: string;
 
   constructor(data?: PartialMessage<PlayerMove>) {
     super();
@@ -478,7 +478,7 @@ export class PlayerMove extends Message<PlayerMove> {
   static readonly typeName = "NT.PlayerMove";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "frames", kind: "message", T: PlayerFrame, repeated: true },
-    { no: 15, name: "user_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 15, name: "user_id", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): PlayerMove {

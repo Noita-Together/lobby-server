@@ -140,6 +140,7 @@ export class RoomState implements Handlers<GameActions> {
     owner,
     opts: _opts,
     publishers,
+    devMode,
     roomId,
     createChatId,
   }: {
@@ -147,12 +148,13 @@ export class RoomState implements Handlers<GameActions> {
     owner: UserState;
     opts: RoomStateCreateOpts;
     publishers: Publishers;
+    devMode: boolean;
     roomId?: string;
     createChatId?: () => string;
   }): RoomState | void {
     let opts: RoomStateCreateOpts | string;
 
-    if (process.env.DEV_MODE === 'true' && owner.uaccess < 3) {
+    if (devMode && owner.uaccess < 3) {
       owner.send(M.sRoomCreateFailed({ reason: 'Room creation is disabled at the moment, Server is in dev mode :)' }));
       return;
     }
@@ -203,8 +205,9 @@ export class RoomState implements Handlers<GameActions> {
     const opts = validateRoomOpts(this.owner.uaccess > 1 ? UpdateBigRoomOpts : UpdateRoomOpts, _opts);
     if (typeof opts === 'string') return opts;
 
+    /* istanbul ignore next */
     if (debug.enabled) {
-      debug(this.id, 'updating options', this.optsValue(_opts, opts));
+      debug(this.id, 'updating options', this.DEBUG_ONLY_optsValue(_opts, opts));
     }
 
     if (opts.name !== undefined) this.name = opts.name;
@@ -219,7 +222,7 @@ export class RoomState implements Handlers<GameActions> {
   setFlags(actor: UserState, payload: NT.ClientRoomFlagsUpdate): string | void {
     if (this.owner !== actor) return "Can't do that.";
 
-    debug(this.id, 'updating flags', payload.flags.map(this.flagValue));
+    debug(this.id, 'updating flags', payload.flags.map(this.DEBUG_ONLY_flagValue));
 
     // TODO: is this valid during a run?
     const flags = M.sRoomFlagsUpdated(payload).toBinary();
@@ -265,6 +268,20 @@ export class RoomState implements Handlers<GameActions> {
     // this.broadcast(M.sHostStart(payload));
   }
 
+  private resetUserStates() {
+    // the run is over. reset the "allowed mods" list
+    this.allowedMods = new WeakMap();
+
+    // TODO: should the _server_ reset the "ready" flag on
+    // the users, or will the app do the right thing out of
+    // the box?
+    //
+    // since there's no message for "the run ended", i'm
+    // guessing not, but i also don't know whether the clients
+    // will correctly send a ready state update if i push out
+    // an empty readystate. investigation needed
+  }
+
   finishRun(actor: UserState) {
     // no error for this yet
     if (this.owner !== actor) return;
@@ -272,8 +289,7 @@ export class RoomState implements Handlers<GameActions> {
     debug(this.id, 'finish run');
 
     this.inProgress = false;
-    // this doesn't send a PB message?
-    // TODO: reset "modCheck" and ready states
+    this.resetUserStates();
   }
 
   join(user: UserState, password?: string): void {
@@ -546,7 +562,8 @@ export class RoomState implements Handlers<GameActions> {
     user.broadcast(this.topic, M.sPlayerDeath({ userId: user.id, ...payload }));
   }
   cChat(payload: NT.ClientChat, user: UserState) {
-    const msg = payload.message ?? '';
+    if (!payload.message) return;
+    const msg = payload.message!;
     if (this.owner === user && msg.startsWith('/')) {
       switch (msg.toLowerCase()) {
         case '/endrun':
@@ -555,12 +572,16 @@ export class RoomState implements Handlers<GameActions> {
       }
       return;
     }
-    if (msg) user.withSocket(this.broadcast, this.chat(user, msg));
+    user.withSocket(this.broadcast, this.chat(user, msg));
   }
   // cPlayerEmote - implemented in original, but doesn't seem to be referenced, and has no proto message
 
   //// helpers ////
-  private flagValue = (flag: NT.ClientRoomFlagsUpdate_GameFlag) => {
+  private static readonly validProps = new Set<string>(Object.keys(CreateRoomOpts.properties));
+  private static readonly sym_unknown: unique symbol = Symbol('unknown');
+
+  /*istanbul ignore next*/
+  private DEBUG_ONLY_flagValue = (flag: NT.ClientRoomFlagsUpdate_GameFlag) => {
     // TODO: the NT app weirdly/incorrectly uses _optionality_ of flag message fields to signal
     // whether they are enabled or disabled. improving this requires a change to the app itself.
     // since we are unable to determine the expected type of a flag, we must currently rely on
@@ -575,9 +596,8 @@ export class RoomState implements Handlers<GameActions> {
     }
   };
 
-  private static readonly validProps = new Set<string>(Object.keys(CreateRoomOpts.properties));
-  private static readonly sym_unknown: unique symbol = Symbol('unknown');
-  private optsValue = (received: Partial<CreateRoomOpts>, validated: Partial<CreateRoomOpts>) => {
+  /* istanbul ignore next */
+  private DEBUG_ONLY_optsValue = (received: Partial<CreateRoomOpts>, validated: Partial<CreateRoomOpts>) => {
     const res: any = {};
     const unknown: string[] = [];
     for (const key of Object.keys(validated) as (keyof CreateRoomOpts)[]) {

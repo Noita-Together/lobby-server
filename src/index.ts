@@ -34,7 +34,7 @@ const app = WS_SECURE
   : uWS.App();
 
 const publishers = BindPublishers(app);
-const lobby = new LobbyState(publishers);
+const lobby = new LobbyState(publishers, process.env.DEV_MODE === 'true');
 
 const JWT_SECRET = process.env.JWT_SECRET ?? null;
 const JWT_REFRESH = process.env.JWT_REFRESH ?? null;
