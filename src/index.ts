@@ -17,21 +17,17 @@ const asNumber = (v: unknown, dflt: number): number => {
   return n;
 };
 
-const TLS_KEY_FILE: string = process.env.WS_KEY_FILE ?? '';
-const TLS_CERT_FILE: string = process.env.WS_CERT_FILE ?? '';
-const USE_TLS = TLS_KEY_FILE !== '' && TLS_CERT_FILE !== '';
-const APP_HOST = process.env.WS_HOST ?? '0.0.0.0';
-const APP_PORT = asNumber(process.env.WS_PORT, 4444);
+const TLS_KEY_FILE: string = process.env.TLS_KEY_FILE ?? '';
+const TLS_CERT_FILE: string = process.env.TLS_CERT_FILE ?? '';
+const TLS_SERVER_NAME: string = process.env.TLS_SERVER_NAME ?? '';
+const USE_TLS = TLS_KEY_FILE !== '' && TLS_CERT_FILE !== '' && TLS_SERVER_NAME !== '';
+const APP_LISTEN_ADDRESS = process.env.APP_LISTEN_ADDRESS ?? '0.0.0.0';
+const APP_LISTEN_PORT = asNumber(process.env.APP_PORT, 4444);
 const WS_PATH = process.env.WS_PATH ?? '/ws';
 const API_PATH = process.env.API_PATH ?? '/api';
-const APP_UNIX_SOCKET = process.env.WS_UNIX_SOCKET ?? '';
+const APP_UNIX_SOCKET = process.env.APP_UNIX_SOCKET ?? '';
 
-const app = USE_TLS
-  ? uWS.SSLApp({
-      key_file_name: TLS_KEY_FILE,
-      cert_file_name: TLS_CERT_FILE,
-    })
-  : uWS.App();
+const app = USE_TLS ? uWS.SSLApp({}) : uWS.App();
 
 const publishers = BindPublishers(app);
 const lobby = new LobbyState(publishers, process.env.DEV_MODE === 'true');
@@ -68,7 +64,21 @@ const shutdown = () => {
   sockets.forEach((socket) => socket.close());
 };
 
-app
+if (USE_TLS) {
+  const appOptions = {
+    key_file_name: TLS_KEY_FILE,
+    cert_file_name: TLS_CERT_FILE,
+  };
+  app.addServerName(TLS_SERVER_NAME, appOptions);
+  const reload = () => {
+    console.log('Received SIGHUP, reloading certificates');
+    app.removeServerName(TLS_SERVER_NAME);
+    app.addServerName(TLS_SERVER_NAME, appOptions);
+  };
+  process.on('SIGHUP', reload);
+}
+
+(USE_TLS ? app.domain(TLS_SERVER_NAME) : app)
   .ws<ClientAuth>(`${WS_PATH}/:token`, {
     idleTimeout: 120,
     sendPingsAutomatically: true,
@@ -96,30 +106,17 @@ app
     res.writeStatus('200 OK').writeHeader('Content-Type', 'application/json; charset=utf-8').end(jsonStr);
   });
 
+const onListen = (host: string) => (token: any) => {
+  const pid = process.pid;
+  console.log(`[${pid}] Listening for websocket connections on ${USE_TLS ? 'wss' : 'ws'}://${host}${WS_PATH}`, token);
+  console.log(`[${pid}] Listening for HTTP connections on ${USE_TLS ? 'https' : 'http'}://${host}${API_PATH}`, token);
+  listen_sockets.push(token);
+};
+
 if (APP_UNIX_SOCKET) {
-  app.listen_unix((token) => {
-    console.log(
-      `Listening for websocket connections on ${USE_TLS ? 'wss' : 'ws'}://[unix:${APP_UNIX_SOCKET}]${WS_PATH}`,
-      token,
-    );
-    console.log(
-      `Listening for HTTP connections on ${USE_TLS ? 'https' : 'http'}://[unix:${APP_UNIX_SOCKET}]${API_PATH}`,
-      token,
-    );
-    listen_sockets.push(token);
-  }, APP_UNIX_SOCKET);
+  app.listen_unix(onListen(`[unix:${APP_UNIX_SOCKET}]`), APP_UNIX_SOCKET);
 } else {
-  app.listen(APP_HOST, APP_PORT, (token) => {
-    console.log(
-      `Listening for websocket connections on ${USE_TLS ? 'wss' : 'ws'}://${APP_HOST}:${APP_PORT}${WS_PATH}`,
-      token,
-    );
-    console.log(
-      `Listening for HTTP connections on ${USE_TLS ? 'https' : 'http'}://${APP_HOST}:${APP_PORT}${API_PATH}`,
-      token,
-    );
-    listen_sockets.push(token);
-  });
+  app.listen(APP_LISTEN_ADDRESS, APP_LISTEN_PORT, onListen(`${APP_LISTEN_ADDRESS}:${APP_LISTEN_PORT}`));
 }
 
 process.on('SIGTERM', shutdown);
