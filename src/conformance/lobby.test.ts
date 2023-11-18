@@ -338,9 +338,12 @@ describe('lobby conformance tests', () => {
       handleMessage(user, M.cStartRun({ forced: false }).toBinary(), true);
       handleMessage(user, M.cRunOver({}).toBinary(), true);
 
-      expect(lobby.getStats('room', 'stats')).toEqual(
-        `{"id":"stats","headings":["Player","SteveKill","UserDeath","UserWin","HeartPickup","OrbPickup"],"rows":[["name",0,0,0,0,0]]}`,
-      );
+      expect(JSON.parse(lobby.getStats('room', 'stats')!)).toEqual({
+        name: `name's room`,
+        id: 'stats',
+        headings: ['Player', 'SteveKill', 'UserDeath', 'UserWin', 'HeartPickup', 'OrbPickup'],
+        rows: [['name', 0, 0, 0, 0, 0]],
+      });
     });
     it('returns undefined for invalid stats ids', () => {
       const { lobby } = createTestEnv(false);
@@ -2391,7 +2394,7 @@ describe('lobby conformance tests', () => {
             id: 'chat1',
             userId: SYSTEM_USER.id,
             name: SYSTEM_USER.name,
-            message: `Stats for run can be found at http://localhost:3000/stats/room1/stats1`,
+            message: `Stats for run can be found at https://noitatogether.com/api/stats/room1/stats1/html`,
           }),
         ),
         sm(
@@ -2450,7 +2453,7 @@ describe('lobby conformance tests', () => {
             id: 'chat1',
             userId: SYSTEM_USER.id,
             name: SYSTEM_USER.name,
-            message: `Stats for run can be found at http://localhost:3000/stats/room1/stats1`,
+            message: `Stats for run can be found at https://noitatogether.com/api/stats/room1/stats1/html`,
           }),
         ),
         sm(

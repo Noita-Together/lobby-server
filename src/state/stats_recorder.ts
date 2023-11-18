@@ -43,7 +43,7 @@ export class StatsRecorder {
     this.counters.set(user.id, userStats);
   }
 
-  toJSON() {
+  toJSON(name: string) {
     const events = Object.entries(StatsEvent).filter(([k, v]) => typeof v === 'number');
 
     const headings = ['Player', ...events.map(([key]) => key)];
@@ -53,6 +53,6 @@ export class StatsRecorder {
       rows.push([username, ...events.map(([_, val]) => userStats.get(val as StatsEvent)!)]);
     }
 
-    return { id: this.id, headings, rows };
+    return { name, id: this.id, headings, rows };
   }
 }

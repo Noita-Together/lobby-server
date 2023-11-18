@@ -12,8 +12,9 @@ describe('StatsRecorder', () => {
       sr.increment({ id: '12', name: 'foo' }, StatsEvent.HeartPickup);
       sr.increment({ id: '34', name: 'bar' }, StatsEvent.OrbPickup);
 
-      const res = sr.toJSON();
+      const res = sr.toJSON('roomName');
       expect(res).toStrictEqual({
+        name: 'roomName',
         id: sr.id,
         headings: ['Player', 'SteveKill', 'UserDeath', 'UserWin', 'HeartPickup', 'OrbPickup'],
         rows: [

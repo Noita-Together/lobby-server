@@ -9,6 +9,7 @@ import {
 import { Publishers, M, createChat } from '../util';
 import { tagPlayerMove } from '../protoutil';
 import { GameActions, Handlers } from '../types';
+import { statsUrl } from '../env_vars';
 
 import { IUser, UserState } from './user';
 import { LobbyState, SYSTEM_USER } from './lobby';
@@ -18,11 +19,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import Debug from 'debug';
 const debug = Debug('nt:room');
-
-export const STATS_BASE_URL = (() => {
-  const base = process.env.STATS_BASE_URL ?? 'http://localhost:3000/stats';
-  return base.endsWith('/') ? base : `${base}/`;
-})();
 
 let id = 0;
 
@@ -351,7 +347,7 @@ export class RoomState implements Handlers<GameActions> {
   private reset() {
     this.inProgress = false;
     if (this.stats) {
-      this.pastStats.set(this.stats.id, JSON.stringify(this.stats.toJSON()));
+      this.pastStats.set(this.stats.id, JSON.stringify(this.stats.toJSON(this.name)));
     }
     this.stats = undefined;
 
@@ -379,9 +375,8 @@ export class RoomState implements Handlers<GameActions> {
 
     debug(this.id, 'finish run');
     if (this.stats) {
-      this.broadcast(
-        this.chat(SYSTEM_USER, `Stats for run can be found at ${STATS_BASE_URL}${this.id}/${this.stats.id}`),
-      );
+      const url = statsUrl(this.id, this.stats.id);
+      this.broadcast(this.chat(SYSTEM_USER, `Stats for run can be found at ${url}`));
     }
 
     this.reset();

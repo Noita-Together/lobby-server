@@ -6,38 +6,32 @@ import { LobbyState } from './state/lobby';
 import { createJwtFns } from './jwt';
 import { createMessageHandler } from './ws_handlers';
 import { BindPublishers } from './util';
+import {
+  API_PATH,
+  APP_LISTEN_ADDRESS,
+  APP_LISTEN_PORT,
+  APP_UNIX_SOCKET,
+  DEV_MODE,
+  JWT_REFRESH,
+  JWT_SECRET,
+  TLS_CERT_FILE,
+  TLS_KEY_FILE,
+  TLS_SERVER_NAME,
+  USE_TLS,
+  WS_PATH,
+  assertEnvRequirements,
+} from './env_vars';
 
 import Debug from 'debug';
 const debug = Debug('nt');
 
-const asNumber = (v: unknown, dflt: number): number => {
-  if (typeof v !== 'string') return dflt;
-  const n = parseInt(v, 10);
-  if (Number.isNaN(n)) return dflt;
-  return n;
-};
-
-const TLS_KEY_FILE: string = process.env.TLS_KEY_FILE ?? '';
-const TLS_CERT_FILE: string = process.env.TLS_CERT_FILE ?? '';
-const TLS_SERVER_NAME: string = process.env.TLS_SERVER_NAME ?? '';
-const USE_TLS = TLS_KEY_FILE !== '' && TLS_CERT_FILE !== '' && TLS_SERVER_NAME !== '';
-const APP_LISTEN_ADDRESS = process.env.APP_LISTEN_ADDRESS ?? '0.0.0.0';
-const APP_LISTEN_PORT = asNumber(process.env.APP_PORT, 4444);
-const WS_PATH = process.env.WS_PATH ?? '/ws';
-const API_PATH = process.env.API_PATH ?? '/api';
-const APP_UNIX_SOCKET = process.env.APP_UNIX_SOCKET ?? '';
-
 const app = USE_TLS ? uWS.SSLApp({}) : uWS.App();
 
 const publishers = BindPublishers(app);
-const lobby = new LobbyState(publishers, process.env.DEV_MODE === 'true');
+const lobby = new LobbyState(publishers, DEV_MODE);
 
-const JWT_SECRET = process.env.JWT_SECRET ?? null;
-const JWT_REFRESH = process.env.JWT_REFRESH ?? null;
-
-if (!JWT_SECRET || !JWT_REFRESH) {
-  console.error('JWT_SECRET and JWT_REFRESH are required environment variables');
-  process.exit(1);
+if (require.main === module) {
+  assertEnvRequirements();
 }
 
 const { verifyToken } = createJwtFns(JWT_SECRET, JWT_REFRESH);
