@@ -18,6 +18,7 @@ import {
   TLS_KEY_FILE,
   TLS_SERVER_NAME,
   USE_TLS,
+  WEBFACE_ORIGIN,
   WS_PATH,
   assertEnvRequirements,
 } from './env_vars';
@@ -58,6 +59,13 @@ const shutdown = () => {
   sockets.forEach((socket) => socket.close());
 };
 
+const setCorsHeaders = (res: uWS.HttpResponse) => {
+  res.writeHeader('Access-Control-Allow-Origin', WEBFACE_ORIGIN);
+  res.writeHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.writeHeader('Access-Control-Allow-Headers', 'origin, content-type, accept, x-requested-with');
+  res.writeHeader('Access-Control-Max-Age', '3600');
+};
+
 const bindHandlers = (serverName?: string) =>
   (serverName ? app.domain(serverName) : app)
     .ws<ClientAuth>(`${WS_PATH}/:token`, {
@@ -71,9 +79,11 @@ const bindHandlers = (serverName?: string) =>
       message: handleMessage,
     })
     .get(`${API_PATH}/health`, (res) => {
+      setCorsHeaders(res);
       res.writeStatus('200 OK').end();
     })
     .get(`${API_PATH}/stats/:roomid/:statsid`, (res, req) => {
+      setCorsHeaders(res);
       const roomId = req.getParameter(0);
       const statsId = req.getParameter(1);
 
@@ -85,6 +95,10 @@ const bindHandlers = (serverName?: string) =>
       }
 
       res.writeStatus('200 OK').writeHeader('Content-Type', 'application/json; charset=utf-8').end(jsonStr);
+    })
+    .options(`${API_PATH}/*`, (res, req) => {
+      setCorsHeaders(res);
+      res.end();
     });
 
 const onListen = (host: string) => (token: any) => {

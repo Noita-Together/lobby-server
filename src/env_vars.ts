@@ -17,6 +17,7 @@ export const APP_UNIX_SOCKET = process.env.APP_UNIX_SOCKET ?? '';
 export const DEV_MODE = process.env.DEV_MODE === 'true';
 export const JWT_SECRET = process.env.JWT_SECRET ?? '';
 export const JWT_REFRESH = process.env.JWT_REFRESH ?? '';
+export const WEBFACE_ORIGIN = process.env.WEBFACE_ORIGIN ?? 'noitatogether.com';
 export const STATS_URL_TEMPLATE =
   process.env.STATS_URL_TEMPLATE ?? 'https://noitatogether.com/api/stats/[ROOM_ID]/[STATS_ID]/html';
 
