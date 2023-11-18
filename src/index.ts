@@ -64,47 +64,34 @@ const shutdown = () => {
   sockets.forEach((socket) => socket.close());
 };
 
-if (USE_TLS) {
-  const appOptions = {
-    key_file_name: TLS_KEY_FILE,
-    cert_file_name: TLS_CERT_FILE,
-  };
-  app.addServerName(TLS_SERVER_NAME, appOptions);
-  const reload = () => {
-    console.log('Received SIGHUP, reloading certificates');
-    app.removeServerName(TLS_SERVER_NAME);
-    app.addServerName(TLS_SERVER_NAME, appOptions);
-  };
-  process.on('SIGHUP', reload);
-}
+const bindHandlers = (serverName?: string) =>
+  (serverName ? app.domain(serverName) : app)
+    .ws<ClientAuth>(`${WS_PATH}/:token`, {
+      idleTimeout: 120,
+      sendPingsAutomatically: true,
+      maxLifetime: 0,
+      maxPayloadLength: 16 * 1024 * 1024,
+      upgrade: handleUpgrade,
+      open: handleOpen,
+      close: handleClose,
+      message: handleMessage,
+    })
+    .get(`${API_PATH}/health`, (res) => {
+      res.writeStatus('200 OK').end();
+    })
+    .get(`${API_PATH}/stats/:roomid/:statsid`, (res, req) => {
+      const roomId = req.getParameter(0);
+      const statsId = req.getParameter(1);
 
-(USE_TLS ? app.domain(TLS_SERVER_NAME) : app)
-  .ws<ClientAuth>(`${WS_PATH}/:token`, {
-    idleTimeout: 120,
-    sendPingsAutomatically: true,
-    maxLifetime: 0,
-    maxPayloadLength: 16 * 1024 * 1024,
-    upgrade: handleUpgrade,
-    open: handleOpen,
-    close: handleClose,
-    message: handleMessage,
-  })
-  .get(`${API_PATH}/health`, (res) => {
-    res.writeStatus('200 OK').end();
-  })
-  .get(`${API_PATH}/stats/:roomid/:statsid`, (res, req) => {
-    const roomId = req.getParameter(0);
-    const statsId = req.getParameter(1);
+      const jsonStr = lobby.getStats(roomId, statsId);
 
-    const jsonStr = lobby.getStats(roomId, statsId);
+      if (!jsonStr) {
+        res.writeStatus('404 Not Found').end();
+        return;
+      }
 
-    if (!jsonStr) {
-      res.writeStatus('404 Not Found').end();
-      return;
-    }
-
-    res.writeStatus('200 OK').writeHeader('Content-Type', 'application/json; charset=utf-8').end(jsonStr);
-  });
+      res.writeStatus('200 OK').writeHeader('Content-Type', 'application/json; charset=utf-8').end(jsonStr);
+    });
 
 const onListen = (host: string) => (token: any) => {
   const pid = process.pid;
@@ -112,6 +99,27 @@ const onListen = (host: string) => (token: any) => {
   console.log(`[${pid}] Listening for HTTP connections on ${USE_TLS ? 'https' : 'http'}://${host}${API_PATH}`, token);
   listen_sockets.push(token);
 };
+
+if (USE_TLS) {
+  const appOptions = {
+    key_file_name: TLS_KEY_FILE,
+    cert_file_name: TLS_CERT_FILE,
+  };
+
+  app.addServerName(TLS_SERVER_NAME, appOptions);
+  bindHandlers(TLS_SERVER_NAME);
+
+  const reload = () => {
+    console.log('Received SIGHUP, reloading certificates');
+    app.removeServerName(TLS_SERVER_NAME);
+    app.addServerName(TLS_SERVER_NAME, appOptions);
+    bindHandlers(TLS_SERVER_NAME);
+  };
+
+  process.on('SIGHUP', reload);
+} else {
+  bindHandlers();
+}
 
 if (APP_UNIX_SOCKET) {
   app.listen_unix(onListen(`[unix:${APP_UNIX_SOCKET}]`), APP_UNIX_SOCKET);
