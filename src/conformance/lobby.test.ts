@@ -224,7 +224,7 @@ describe('lobby conformance tests', () => {
     });
 
     it('allows disconnected users to rejoin locked rooms. owner retains ownership', () => {
-      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv(false);
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages, lobby } = createTestEnv(false);
       const owner = testSocket('ownerid', 'owner');
       const player = testSocket('playerid', 'player');
 
@@ -267,7 +267,7 @@ describe('lobby conformance tests', () => {
       handleOpen(owner2);
       handleMessage(owner2, M.cJoinRoom({ id: roomId }).toBinary(), true);
 
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
+      // expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
@@ -280,7 +280,7 @@ describe('lobby conformance tests', () => {
       handleOpen(player2);
       handleMessage(player2, M.cJoinRoom({ id: roomId }).toBinary(), true);
 
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
+      // expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
@@ -290,6 +290,11 @@ describe('lobby conformance tests', () => {
       handleMessage(owner, M.cRoomUpdate({ locked: false }).toBinary(), true);
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomUpdated');
       expect(sentMessages).toEqual([]);
+
+      const room = lobby.getRoom(roomId);
+      expect(room).toBeDefined();
+      const users = room!.getUsers();
+      expect([...users].length).toEqual(2);
     });
   });
 
@@ -1294,7 +1299,7 @@ describe('lobby conformance tests', () => {
 
     // name: 'cJoinRoom - success (twice)',
     tests.push({
-      name: 'cRoomUpdate - kick (success); join room (success)',
+      name: 'cRoomUpdate - success (twice)',
       clientMessages: (users) => [
         ...u1create_u2join_no_password.clientMessages(users),
         [
@@ -1306,14 +1311,6 @@ describe('lobby conformance tests', () => {
       ],
       serverMessages: (users) => [
         ...u1create_u2join_no_password.serverMessages(users),
-        sm(
-          '/room/room1',
-          users.user2,
-          M.sUserJoinedRoom({
-            userId: '2',
-            name: 'user2',
-          }),
-        ),
         sm(
           null,
           users.user2,

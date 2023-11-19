@@ -390,6 +390,7 @@ export class RoomState implements Handlers<GameActions> {
    */
   join(user: UserState, password?: string): void {
     let reason: string | null = null;
+    let joinMessage = 'joining';
     const room = user.room();
 
     if (!room) {
@@ -403,6 +404,7 @@ export class RoomState implements Handlers<GameActions> {
       // room. delete the old room if user is the owner, otherwise just leave
       room.delete(user) || room.part(user);
     } else {
+      joinMessage = 'rejoining';
       // user (probably) got disconnected while in a room, and is rejoining it. allow them in
       // the NT app currently provides no way to join a room without leaving the
       // current room, but could in the future. if so, this assumption changes
@@ -413,18 +415,21 @@ export class RoomState implements Handlers<GameActions> {
       return;
     }
 
-    debug(this.id, 'user joining', user.id, user.name);
+    debug(this.id, joinMessage, user.id, user.name);
     this.users.add(user);
 
-    // broadcast the join to everyone except the user that joined
-    // that user will receive a different confirmation in `user.joined`
-    user.broadcast(
-      this.topic,
-      M.sUserJoinedRoom({
-        userId: user.id,
-        name: user.name,
-      }),
-    );
+    // don't re-broadcast reconnect rejoins
+    if (room !== this) {
+      // broadcast the join to everyone except the user that joined
+      // that user will receive a different confirmation in `user.joined`
+      user.broadcast(
+        this.topic,
+        M.sUserJoinedRoom({
+          userId: user.id,
+          name: user.name,
+        }),
+      );
+    }
     user.joined(this);
 
     // this.playerPositions.updatePlayers(this.users);

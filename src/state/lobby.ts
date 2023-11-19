@@ -171,6 +171,10 @@ export class LobbyState implements Handlers<LobbyActions> {
     return this.rooms.get(roomId)?.getStats(statsId);
   }
 
+  getRoom(roomId: string): RoomState | void {
+    return this.rooms.get(roomId);
+  }
+
   /**
    * Create a new room. Fills the configured id-creators from this
    * instance's properties. Used only for testing.
