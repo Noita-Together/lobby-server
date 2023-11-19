@@ -216,6 +216,7 @@ export class UserState implements IUser {
    * Gracefully clean up this UserState instance
    */
   destroy(code?: number, shortMessage?: RecognizedString) {
+    debug('destroying socket', { instanceId: this.instanceId, connId: this.socket?.getUserData().conn_id ?? null });
     this.socket?.end(code, shortMessage);
     this.socket = null;
   }

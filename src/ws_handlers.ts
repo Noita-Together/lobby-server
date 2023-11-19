@@ -149,7 +149,11 @@ export const createMessageHandler = ({
       console.error('BUG: userState not present in weakmap');
       return;
     }
-    lobby.userDisconnected(user, code, message);
+    user.withSocket((socket) => {
+      // call userDisconnected only if the socket being closed is this
+      // UserState instance's active connection. otherwise, let it close silently.
+      if (socket === ws) lobby.userDisconnected(user, code, message);
+    });
   };
 
   return { sockets, users, handleUpgrade, handleOpen, handleClose, handleMessage };
