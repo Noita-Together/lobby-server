@@ -117,5 +117,5 @@ export type Publishers = ReturnType<typeof BindPublishers>;
  */
 export const shortHash = (() => {
   const key = randomBytes(256 / 8);
-  return (ip: string): string => createHmac('sha-256', key).update(ip).digest().subarray(0, 12).toString('base64');
+  return (ip: string): string => createHmac('sha256', key).update(ip).digest().subarray(0, 12).toString('base64');
 })();
