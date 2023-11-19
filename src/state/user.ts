@@ -6,6 +6,7 @@ import { LobbyState } from './lobby';
 import { ClientAuthWebSocket } from '../ws_handlers';
 
 import Debug from 'debug';
+import { RecognizedString } from 'uWebSockets.js';
 const debug = Debug('nt:user');
 
 export interface IUser {
@@ -214,7 +215,8 @@ export class UserState implements IUser {
   /**
    * Gracefully clean up this UserState instance
    */
-  destroy() {
+  destroy(code?: number, shortMessage?: RecognizedString) {
+    this.socket?.end(code, shortMessage);
     this.socket = null;
   }
 }

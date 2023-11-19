@@ -5,6 +5,7 @@ import { AuthProvider, ClientAuth } from '../runtypes/client_auth';
 import { LobbyState, SYSTEM_USER } from '../state/lobby';
 import { BindPublishers, M } from '../util';
 import { ClientAuthWebSocket, TaggedClientAuth, createMessageHandler } from '../ws_handlers';
+import { RecognizedString } from 'uWebSockets.js';
 
 type sentMessage = {
   topic: string | null;
@@ -21,6 +22,7 @@ const createTestEnv = (
   const debug = () => {};
 
   const sentMessages: sentMessage[] = [];
+  const closedSockets: { socket: ClientAuthWebSocket; code?: number; shortMessage?: RecognizedString }[] = [];
   const subscribed: Map<ClientAuthWebSocket, Set<string>> = new Map();
 
   const publishers = BindPublishers(
@@ -65,7 +67,12 @@ const createTestEnv = (
       getUserData(): TaggedClientAuth {
         return { conn_id: 0, ...clientAuth };
       },
-      close() {},
+      end(code?: number, shortMessage?: RecognizedString) {
+        closedSockets.push({ socket: user, code, shortMessage });
+      },
+      close() {
+        closedSockets.push({ socket: user });
+      },
       publish(topic: string, msg: Uint8Array) {
         sentMessages.push({ topic, message: Envelope.fromBinary(msg), user });
         return true;
@@ -92,7 +99,18 @@ const createTestEnv = (
     return user;
   };
 
-  return { sentMessages, subscribed, lobby, users, testSocket, handleUpgrade, handleOpen, handleMessage, handleClose };
+  return {
+    sentMessages,
+    closedSockets,
+    subscribed,
+    lobby,
+    users,
+    testSocket,
+    handleUpgrade,
+    handleOpen,
+    handleMessage,
+    handleClose,
+  };
 };
 
 const uuidRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -105,6 +123,22 @@ describe('lobby conformance tests', () => {
 
       handleOpen(user);
       expect(subscribed.get(user)?.has(lobby.topic)).toBe(true);
+    });
+    it('closes old sockets if the same user connects a new one', () => {
+      const { testSocket, handleOpen, closedSockets } = createTestEnv(false);
+      const user = testSocket('id', 'name');
+
+      handleOpen(user);
+      expect(closedSockets).toEqual([]);
+
+      handleOpen(user);
+      const closed = closedSockets.shift();
+      expect(closed).toEqual({
+        socket: user,
+        code: 1011,
+        shortMessage: 'Connection superseded',
+      });
+      expect(closedSockets).toEqual([]);
     });
   });
 
@@ -302,7 +336,7 @@ describe('lobby conformance tests', () => {
     it('rejects room creation from non-devs', () => {
       const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv(true);
       const user = testSocket('id', 'name');
-      const dev = testSocket('id', 'myndzi');
+      const dev = testSocket('devid', 'myndzi');
 
       handleOpen(user);
       handleOpen(dev);

@@ -20,7 +20,7 @@ export type TaggedClientAuth = {
 } & ClientAuth;
 export type ClientAuthWebSocket = Pick<
   WebSocket<TaggedClientAuth>,
-  'getUserData' | 'send' | 'publish' | 'subscribe' | 'unsubscribe' | 'close'
+  'getUserData' | 'send' | 'publish' | 'subscribe' | 'unsubscribe' | 'close' | 'end'
 >;
 
 /**

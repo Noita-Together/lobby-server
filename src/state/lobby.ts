@@ -90,6 +90,12 @@ export class LobbyState implements Handlers<LobbyActions> {
     //   to start them fresh, so even though we have them in the map, we'll ignore
     //   that entry, create a fresh one, overwrite that entry, and the old object
     //   will get garbage-collected
+
+    if (user) {
+      // if there was an existing user, destroy its socket and subscriptions
+      user.destroy(1011, 'Connection superseded');
+    }
+
     if (user && user.room() !== null) {
       debug(id, name, 'reconnected');
       user.reconnected(ws, this);
