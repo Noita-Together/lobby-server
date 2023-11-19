@@ -7,6 +7,8 @@ import { Envelope, GameAction, LobbyAction } from './gen/messages_pb';
 
 import { GameActions, LobbyActions } from './types';
 
+import { createHmac, randomBytes } from 'node:crypto';
+
 import Debug from 'debug';
 const debug = Debug('nt:util');
 
@@ -105,3 +107,15 @@ export const createChat =
     });
 
 export type Publishers = ReturnType<typeof BindPublishers>;
+
+/**
+ * Takes an input string and hashes it with a session-unique HMAC key.
+ * Returns a 16-character base64 string from the first 12 bytes of the result.
+ *
+ * Primarily used to hash IP addresses for logging: the output should not
+ * be reversible, but it should be consistent when the input is the same.
+ */
+export const shortHash = (() => {
+  const key = randomBytes(256 / 8);
+  return (ip: string): string => createHmac('sha-256', key).update(ip).digest().subarray(0, 12).toString('base64');
+})();

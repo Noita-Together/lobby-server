@@ -11,6 +11,7 @@ import { maybePlayerMove } from './protoutil';
 import * as NT from './gen/messages_pb';
 
 import type Debug from 'debug';
+import { shortHash } from './util';
 
 export type ClientAuthWebSocket = Pick<
   WebSocket<ClientAuth>,
@@ -36,7 +37,7 @@ export const createMessageHandler = ({
   const users = new WeakMap<ClientAuthWebSocket, UserState>();
 
   const handleUpgrade = (res: HttpResponse, req: HttpRequest, ctx: us_socket_context_t) => {
-    const ip = req.getHeader('x-forwarded-for') || Buffer.from(res.getRemoteAddressAsText()).toString();
+    const ip = shortHash(req.getHeader('x-forwarded-for') || Buffer.from(res.getRemoteAddressAsText()).toString());
     debug(ip, 'upgrade request');
 
     // See https://github.com/uNetworking/uWebSockets.js/blob/master/examples/UpgradeAsync.js
