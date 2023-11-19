@@ -471,14 +471,14 @@ export class RoomState implements Handlers<GameActions> {
     // otherwise, remove user from room and notify everybody
     this.users.delete(target);
 
-    // update leaving user state and subscriptions before sending the chat update
-    target.parted(this);
-
     // send the control message confirming the removal
     this.broadcast(pb({ userId: target.id }));
 
     // send a chat message to the room
     this.broadcast(this.chat(SYSTEM_USER, `${target.name} ${message}`));
+
+    // update leaving user state and subscriptions before sending the chat update
+    target.parted(this);
 
     // this.playerPositions.updatePlayers(this.users);
     debug(this.id, 'user left', target.id, target.name, message);
