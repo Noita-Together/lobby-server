@@ -4,7 +4,7 @@ import { createJwtFns } from '../jwt';
 import { AuthProvider, ClientAuth } from '../runtypes/client_auth';
 import { LobbyState, SYSTEM_USER } from '../state/lobby';
 import { BindPublishers, M } from '../util';
-import { ClientAuthWebSocket, createMessageHandler } from '../ws_handlers';
+import { ClientAuthWebSocket, TaggedClientAuth, createMessageHandler } from '../ws_handlers';
 
 type sentMessage = {
   topic: string | null;
@@ -62,8 +62,8 @@ const createTestEnv = (
         sentMessages.push({ topic: null, message: Envelope.fromBinary(msg), user });
         return 1;
       },
-      getUserData(): ClientAuth {
-        return clientAuth;
+      getUserData(): TaggedClientAuth {
+        return { conn_id: 0, ...clientAuth };
       },
       close() {},
       publish(topic: string, msg: Uint8Array) {

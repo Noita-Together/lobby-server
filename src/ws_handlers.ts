@@ -13,8 +13,13 @@ import * as NT from './gen/messages_pb';
 import type Debug from 'debug';
 import { shortHash } from './util';
 
+let conn_id = 0;
+
+export type TaggedClientAuth = {
+  conn_id: number;
+} & ClientAuth;
 export type ClientAuthWebSocket = Pick<
-  WebSocket<ClientAuth>,
+  WebSocket<TaggedClientAuth>,
   'getUserData' | 'send' | 'publish' | 'subscribe' | 'unsubscribe' | 'close'
 >;
 
@@ -37,6 +42,8 @@ export const createMessageHandler = ({
   const users = new WeakMap<ClientAuthWebSocket, UserState>();
 
   const handleUpgrade = (res: HttpResponse, req: HttpRequest, ctx: us_socket_context_t) => {
+    const thisConnId = conn_id++;
+
     const ip = shortHash(req.getHeader('x-forwarded-for') || Buffer.from(res.getRemoteAddressAsText()).toString());
     debug(ip, 'upgrade request');
 
@@ -64,7 +71,13 @@ export const createMessageHandler = ({
         // "cork" is weirdly named, but essentially means to bundle potentially multiple
         // syscalls into a single operation
         res.cork(() => {
-          res.upgrade(clientAuth, secWebSocketKey, secWebSocketProtocol, secWebSocketExtensions, ctx);
+          res.upgrade(
+            { conn_id: thisConnId, ...clientAuth },
+            secWebSocketKey,
+            secWebSocketProtocol,
+            secWebSocketExtensions,
+            ctx,
+          );
         });
       })
       .catch((err) => {

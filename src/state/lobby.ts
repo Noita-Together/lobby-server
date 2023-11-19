@@ -10,7 +10,6 @@ export const SYSTEM_USER: IUser = { id: '-1', name: '[SYSTEM]' };
 export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]' };
 
 import Debug from 'debug';
-import { StatsRecorder } from './stats_recorder';
 const debug = Debug('nt:lobby');
 
 type Simplify<T> = { [K in keyof T]: T[K] } & unknown;
@@ -103,7 +102,7 @@ export class LobbyState implements Handlers<LobbyActions> {
     // additional debug info - verify whether the userstate identity changed,
     // and whether the socket is the same or not
     user.withSocket((socket) => {
-      debug(id, name, user!.instanceId, socket);
+      debug({ id, name, instanceId: user!.instanceId, connId: socket?.getUserData().conn_id ?? null });
     });
 
     this.users.set(user.id, user);
