@@ -99,6 +99,13 @@ export class LobbyState implements Handlers<LobbyActions> {
       user = new UserState({ id, name }, ws);
       user.connected(ws, this);
     }
+
+    // additional debug info - verify whether the userstate identity changed,
+    // and whether the socket is the same or not
+    user.withSocket((socket) => {
+      debug(id, name, user!.instanceId, socket);
+    });
+
     this.users.set(user.id, user);
 
     return user;

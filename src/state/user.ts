@@ -21,6 +21,8 @@ const uaccess = new Map<string, number>([
   ['myndzi', 3],
 ]);
 
+let instanceId = 0;
+
 /**
  * Represents the state of a user in an NT lobby
  */
@@ -39,8 +41,10 @@ export class UserState implements IUser {
   private readyState: NT.ClientReadyState;
 
   readonly playerIdBuf: Buffer; // just don't modify this
+  readonly instanceId: number;
 
   constructor({ id, name }: { id: string; name: string }, socket: ClientAuthWebSocket) {
+    this.instanceId = instanceId++;
     this.id = id;
     this.name = name;
     this.uaccess = uaccess.get(name) ?? 0;
