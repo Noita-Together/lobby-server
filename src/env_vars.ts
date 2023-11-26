@@ -10,7 +10,7 @@ export const TLS_CERT_FILE: string = process.env.TLS_CERT_FILE ?? '';
 export const TLS_SERVER_NAME: string = process.env.TLS_SERVER_NAME ?? '';
 export const USE_TLS = TLS_KEY_FILE !== '' && TLS_CERT_FILE !== '' && TLS_SERVER_NAME !== '';
 export const APP_LISTEN_ADDRESS = process.env.APP_LISTEN_ADDRESS ?? '0.0.0.0';
-export const APP_LISTEN_PORT = asNumber(process.env.APP_PORT, 4444);
+export const APP_LISTEN_PORT = asNumber(process.env.APP_LISTEN_PORT, 4444);
 export const WS_PATH = process.env.WS_PATH ?? '/ws';
 export const API_PATH = process.env.API_PATH ?? '/api';
 export const APP_UNIX_SOCKET = process.env.APP_UNIX_SOCKET ?? '';
