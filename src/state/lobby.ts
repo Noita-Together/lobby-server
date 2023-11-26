@@ -15,11 +15,6 @@ const debug = Debug('nt:lobby');
 type Simplify<T> = { [K in keyof T]: T[K] } & unknown;
 type createRoomParams = Simplify<Omit<Parameters<typeof RoomState.create>[0], 'roomId'>>;
 
-type roomStats = {
-  jsonString: string;
-  roomId: string;
-};
-
 /**
  * Represents the state of an NT lobby. Currently there is exactly one lobby per
  * running instance.
@@ -32,7 +27,6 @@ export class LobbyState implements Handlers<LobbyActions> {
 
   private rooms = new Map<string, RoomState>();
   private users = new Map<string, UserState>();
-  private stats = new Map<string, roomStats>();
 
   /**
    * Construct a new Lobby
@@ -74,7 +68,7 @@ export class LobbyState implements Handlers<LobbyActions> {
 
     const { sub: id, preferred_username: name } = ws.getUserData();
 
-    // TODO: what do we want to happen if a user launches multiple clients?
+    // TODO: should we support multiple clients?
     // - in the new proto proposal, each user has a lobby id that is distinct
     //   from their authenticated/twitch id. this would allow mulitple instances
     //   of the same "real" user to be kept separate and not conflict.
@@ -130,10 +124,10 @@ export class LobbyState implements Handlers<LobbyActions> {
     // a quit and a disconnect. pick that up at the uWS app layer (websocket close code?)
     // and communicate it here.
 
+    user.disconnected();
+
     // if the user is not in a room, we can safely clean them up
     const room = user.room();
-
-    user.disconnected();
     if (room) {
       // if the user _is_ in a room, we'll leave them in the list in case
       // they reconnect. if this user was the last active user in a room,

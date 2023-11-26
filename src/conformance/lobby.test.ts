@@ -254,6 +254,8 @@ describe('lobby conformance tests', () => {
 
       handleClose(user, 1006, Buffer.from('test'));
 
+      // rooms are deleted when the host disconnects
+      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomDeleted');
       expect(sentMessages).toEqual([]);
     });
 
@@ -294,41 +296,17 @@ describe('lobby conformance tests', () => {
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomUpdated');
       expect(sentMessages).toEqual([]);
 
-      handleClose(owner, 1006, Buffer.from('test'));
-
-      // owner can rejoin
-      const owner2 = testSocket('ownerid', 'owner');
-      handleOpen(owner2);
-      handleMessage(owner2, M.cJoinRoom({ id: roomId }).toBinary(), true);
-
-      // expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
-      expect(sentMessages).toEqual([]);
-
-      handleClose(owner, 1006, Buffer.from('test'));
+      handleClose(player, 1006, Buffer.from('test'));
 
       // player can rejoin
       const player2 = testSocket('playerid', 'player');
       handleOpen(player2);
       handleMessage(player2, M.cJoinRoom({ id: roomId }).toBinary(), true);
 
-      // expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
       expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
       expect(sentMessages).toEqual([]);
-
-      // owner can still change room properties = they are still the owner
-      handleMessage(owner, M.cRoomUpdate({ locked: false }).toBinary(), true);
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomUpdated');
-      expect(sentMessages).toEqual([]);
-
-      const room = lobby.getRoom(roomId);
-      expect(room).toBeDefined();
-      const users = room!.getUsers();
-      expect([...users].length).toEqual(2);
     });
   });
 

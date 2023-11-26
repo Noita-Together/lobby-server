@@ -239,8 +239,6 @@ export class RoomState implements Handlers<GameActions> {
   update(actor: UserState, opts: RoomStateUpdateOpts): string | void {
     if (this.owner !== actor) return "Can't do that.";
 
-    // TODO: is this valid during a run?
-
     const _opts = validateRoomOpts(this.owner.uaccess > 1 ? UpdateBigRoomOpts : UpdateRoomOpts, opts);
     if (typeof _opts === 'string') return _opts;
 
@@ -272,7 +270,6 @@ export class RoomState implements Handlers<GameActions> {
 
     debug(this.id, 'updating flags', payload.flags.map(this.DEBUG_ONLY_flagValue));
 
-    // TODO: is this valid during a run?
     const flags = M.sRoomFlagsUpdated(payload).toBinary();
 
     // store the last-known flags as an already-encoded buffer, since we'll be
