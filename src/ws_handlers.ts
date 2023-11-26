@@ -41,7 +41,17 @@ export const createMessageHandler = ({
   const sockets = new Set<ClientAuthWebSocket>();
   const users = new WeakMap<ClientAuthWebSocket, UserState>();
 
-  const handleUpgrade = (res: HttpResponse, req: HttpRequest, ctx: us_socket_context_t) => {
+  const trycatch =
+    <Arg extends unknown, Args extends Arg[]>(label: string, fn: (...args: Args) => void) =>
+    (...args: Args) => {
+      try {
+        return fn(...args);
+      } catch (e) {
+        debug(`${label}: caught unexpected error`, e);
+      }
+    };
+
+  const handleUpgrade = trycatch('handleUpgrade', (res: HttpResponse, req: HttpRequest, ctx: us_socket_context_t) => {
     const thisConnId = conn_id++;
 
     const ip = shortHash(req.getHeader('x-forwarded-for') || Buffer.from(res.getRemoteAddressAsText()).toString());
@@ -86,63 +96,67 @@ export const createMessageHandler = ({
           res.writeStatus('401 Unauthorized').end();
         });
       });
-  };
+  });
 
-  const handleOpen = (ws: ClientAuthWebSocket) => {
+  const handleOpen = trycatch('handleOpen', (ws: ClientAuthWebSocket) => {
     sockets.add(ws);
     const user = lobby.userConnected(ws);
     users.set(ws, user);
-  };
+  });
 
-  const handleMessage = (ws: ClientAuthWebSocket, message: ArrayBuffer, isBinary: boolean) => {
-    const user = users.get(ws);
-    if (!user) {
-      console.error('BUG: userState not present in weakmap');
-      return;
-    }
-
-    // optimized message handling for player move updates
-    const buf = Buffer.from(message);
-    const playerMovePayload = maybePlayerMove(buf);
-
-    if (playerMovePayload) {
-      user.room()?.playerMoveRaw(playerMovePayload, user);
-      return;
-    }
-
-    // fall back to proper decode/encode for everything else
-    const msg = NT.Envelope.fromBinary(buf);
-
-    // debug(user.name, msg.kind.case, msg.kind.value?.action.case);
-
-    const { case: actionType, value: actionPayload } = msg.kind;
-    if (!actionType || !actionPayload) return; // empty "kind"
-
-    const { case: action, value: payload } = actionPayload.action;
-    if (!action || !payload) return; // empty "action"
-
-    let target: LobbyState | RoomState | null = null;
-    switch (actionType) {
-      case 'lobbyAction':
-        target = lobby;
-        break;
-      case 'gameAction':
-        target = user.room();
-        break;
-    }
-
-    try {
-      if (target && action) {
-        const method = (target as any)[action];
-        if (typeof method === 'function') method.call(target, payload, user);
+  const handleMessage = trycatch(
+    'handleMessage',
+    (ws: ClientAuthWebSocket, message: ArrayBuffer, isBinary: boolean) => {
+      const user = users.get(ws);
+      if (!user) {
+        console.error('BUG: userState not present in weakmap');
+        return;
       }
-    } catch (e) {
-      console.error('Caught error from handler', actionType, action, e);
-      // debug('Caught error from handler', actionType, action, e);
-    }
-  };
 
-  const handleClose = (ws: ClientAuthWebSocket, code: number, message: ArrayBuffer) => {
+      // optimized message handling for player move updates
+      const buf = Buffer.from(message);
+      const playerMovePayload = maybePlayerMove(buf);
+
+      if (playerMovePayload) {
+        user.room()?.playerMoveRaw(playerMovePayload, user);
+        return;
+      }
+
+      // fall back to proper decode/encode for everything else
+      const msg = NT.Envelope.fromBinary(buf);
+
+      // debug(user.name, msg.kind.case, msg.kind.value?.action.case);
+
+      const { case: actionType, value: actionPayload } = msg.kind;
+      if (!actionType || !actionPayload) return; // empty "kind"
+
+      const { case: action, value: payload } = actionPayload.action;
+      if (!action || !payload) return; // empty "action"
+
+      let target: LobbyState | RoomState | null = null;
+      switch (actionType) {
+        case 'lobbyAction':
+          target = lobby;
+          break;
+        case 'gameAction':
+          target = user.room();
+          break;
+      }
+
+      try {
+        if (target && action) {
+          const method = (target as any)[action];
+          if (typeof method === 'function') method.call(target, payload, user);
+        }
+      } catch (e) {
+        console.error('Caught error from handler', actionType, action, e);
+        // debug('Caught error from handler', actionType, action, e);
+      }
+    },
+  );
+
+  const handleClose = trycatch('handleClose', (ws: ClientAuthWebSocket, code: number, message: ArrayBuffer) => {
+    debug('handleClose', ws.getUserData().conn_id);
     sockets.delete(ws);
     const user = users.get(ws);
     if (!user) {
@@ -150,11 +164,13 @@ export const createMessageHandler = ({
       return;
     }
     user.withSocket((socket) => {
+      if (!socket) return;
+      debug('user current socket', socket.getUserData().conn_id);
       // call userDisconnected only if the socket being closed is this
       // UserState instance's active connection. otherwise, let it close silently.
       if (socket === ws) lobby.userDisconnected(user, code, message);
     });
-  };
+  });
 
   return { sockets, users, handleUpgrade, handleOpen, handleClose, handleMessage };
 };

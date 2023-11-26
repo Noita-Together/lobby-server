@@ -133,16 +133,14 @@ export class LobbyState implements Handlers<LobbyActions> {
     // if the user is not in a room, we can safely clean them up
     const room = user.room();
 
+    user.disconnected();
     if (room) {
-      user.disconnected();
-
       // if the user _is_ in a room, we'll leave them in the list in case
       // they reconnect. if this user was the last active user in a room,
       // we'll destroy the entire room.
       this.gc(room);
     } else {
       this.users.delete(user.id);
-      user.destroy();
     }
   }
 

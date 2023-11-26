@@ -617,6 +617,7 @@ export class RoomState implements Handlers<GameActions> {
     this.owner.send(M.sPlayerTakeItem({ userId, ...payload }));
   }
   cPlayerPickup(payload: NT.ClientPlayerPickup, user: UserState) {
+    debug('cPlayerPickup', this.inProgress, user.name, payload);
     if (!this.inProgress) return;
 
     // { ignoreSelf: true }

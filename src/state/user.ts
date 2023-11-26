@@ -213,11 +213,21 @@ export class UserState implements IUser {
   }
 
   /**
-   * Gracefully clean up this UserState instance
+   * Gracefully clean up this UserState instance. Called from the websocket close handler, but
+   * may also be called from business logic to close the socket from the server side of things.
    */
   destroy(code?: number, shortMessage?: RecognizedString) {
-    debug('destroying socket', { instanceId: this.instanceId, connId: this.socket?.getUserData().conn_id ?? null });
-    this.socket?.end(code, shortMessage);
+    const socket = this.socket;
+
+    // uWS synchronously calls the close handler when the _server_ closes the connection, but doesn't inform us
+    // of the difference. we want to notify the UserState instance that the socket was closed by the client, but
+    // not recursively notify it when the server initiated the close. therefore, we must set the socket reference
+    // to null _before_ calling socket.end(), which will let us check and ignore the close event in the handler.
     this.socket = null;
+
+    if (socket !== null) {
+      debug('destroying socket', { instanceId: this.instanceId, connId: socket.getUserData().conn_id });
+      socket.end(code, shortMessage);
+    }
   }
 }

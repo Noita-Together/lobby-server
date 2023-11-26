@@ -1,10 +1,9 @@
 import uWS, { us_listen_socket } from 'uWebSockets.js';
 
-import { ClientAuth } from './runtypes/client_auth';
 import { LobbyState } from './state/lobby';
 
 import { createJwtFns } from './jwt';
-import { createMessageHandler } from './ws_handlers';
+import { TaggedClientAuth, createMessageHandler } from './ws_handlers';
 import { BindPublishers } from './util';
 import {
   API_PATH,
@@ -68,7 +67,7 @@ const setCorsHeaders = (res: uWS.HttpResponse) => {
 
 const bindHandlers = (serverName?: string) =>
   (serverName ? app.domain(serverName) : app)
-    .ws<ClientAuth>(`${WS_PATH}/:token`, {
+    .ws<TaggedClientAuth>(`${WS_PATH}/:token`, {
       idleTimeout: 120,
       sendPingsAutomatically: true,
       maxLifetime: 0,
