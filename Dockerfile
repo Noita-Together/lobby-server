@@ -11,7 +11,7 @@ COPY src/ ./src/
 
 # run tests
 COPY jest.config.js .
-RUN npx jest
+RUN npm test
 
 # build
 RUN npx tsup src/index.ts
