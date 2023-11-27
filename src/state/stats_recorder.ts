@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { IUser } from './user';
+import { RoomState } from './room';
 
 export enum StatsEvent {
   // BigSteveKill,
@@ -25,12 +26,15 @@ export class StatsRecorder {
   private usernames = new Map<string, string>();
   private counters = new Map<string, Map<StatsEvent, number>>();
 
-  constructor(users: IUser[], createId: () => string = uuidv4) {
+  constructor(createId: () => string = uuidv4) {
     this.id = createId();
+  }
 
+  initUsers(users: Iterable<IUser>) {
     // record users that were present at game start, even if they
     // never generate any stats
     for (const { id, name } of users) {
+      if (this.usernames.has(id)) continue;
       this.usernames.set(id, name);
       this.counters.set(id, new Map(initialMap));
     }
@@ -43,7 +47,7 @@ export class StatsRecorder {
     this.counters.set(user.id, userStats);
   }
 
-  toJSON(name: string) {
+  toJSON(room: RoomState) {
     const events = Object.entries(StatsEvent).filter(([k, v]) => typeof v === 'number');
 
     const headings = ['Player', ...events.map(([key]) => key)];
@@ -53,6 +57,6 @@ export class StatsRecorder {
       rows.push([username, ...events.map(([_, val]) => userStats.get(val as StatsEvent)!)]);
     }
 
-    return { name, id: this.id, headings, rows };
+    return { id: this.id, roomId: room.id, name: room.getName(), headings, rows };
   }
 }

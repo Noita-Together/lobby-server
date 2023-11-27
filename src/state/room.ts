@@ -118,6 +118,13 @@ export class RoomState implements Handlers<GameActions> {
   }
 
   /**
+   * The room's name
+   */
+  getName(): string {
+    return this.name;
+  }
+
+  /**
    * Return the simplified representation of a user, used to
    * construct "users in this room" messages
    */
@@ -321,7 +328,8 @@ export class RoomState implements Handlers<GameActions> {
 
     if (this.gamemode === 0) {
       // only tracking coop stats for now
-      this.stats ??= new StatsRecorder([...this.users.values()], this.createStatsId);
+      this.stats ??= new StatsRecorder(this.createStatsId);
+      this.stats.initUsers(this.users);
     }
 
     // store the mods that users had at the start of a run
@@ -344,7 +352,7 @@ export class RoomState implements Handlers<GameActions> {
   private reset() {
     this.inProgress = false;
     if (this.stats) {
-      this.pastStats.set(this.stats.id, JSON.stringify(this.stats.toJSON(this.name)));
+      this.pastStats.set(this.stats.id, JSON.stringify(this.stats.toJSON(this)));
     }
     this.stats = undefined;
 

@@ -350,31 +350,45 @@ describe('lobby conformance tests', () => {
       );
       const host = testSocket('hostId', 'host');
       const player = testSocket('playerId', 'player');
+      const player2 = testSocket('playerId2', 'player2');
 
       handleOpen(host);
       handleOpen(player);
+      handleOpen(player2);
       handleMessage(host, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "host's room" }).toBinary(), true);
       handleMessage(player, M.cJoinRoom({ id: 'room' }).toBinary(), true);
       handleMessage(host, M.cStartRun({ forced: false }).toBinary(), true);
 
-      handleMessage(player, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
-      handleMessage(player, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
+      handleMessage(host, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
+      handleMessage(host, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
 
-      // StartRun can be sent midgame, don't obliterate stats
+      // support users joining mid-run
+      handleMessage(player2, M.cJoinRoom({ id: 'room' }).toBinary(), true);
       handleMessage(host, M.cStartRun({ forced: false }).toBinary(), true);
 
-      handleMessage(host, M.cPlayerPickup({ kind: { case: 'orb', value: { id: 3 } } }).toBinary(), true);
-      handleMessage(host, M.cPlayerPickup({ kind: { case: 'orb', value: { id: 7 } } }).toBinary(), true);
+      handleMessage(player, M.cPlayerPickup({ kind: { case: 'orb', value: { id: 3 } } }).toBinary(), true);
+      handleMessage(player, M.cPlayerPickup({ kind: { case: 'orb', value: { id: 7 } } }).toBinary(), true);
+      handleMessage(player, M.cAngerySteve().toBinary(), true);
+      handleMessage(player, M.cPlayerDeath({ isWin: false }).toBinary(), true);
+
+      // win deaths don't count
+      handleMessage(host, M.cPlayerDeath({ isWin: true }).toBinary(), true);
+      handleMessage(player, M.cPlayerDeath({ isWin: true }).toBinary(), true);
 
       handleMessage(host, M.cRunOver({}).toBinary(), true);
 
+      // stats after game is over don't accrue
+      handleMessage(host, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
+
       expect(JSON.parse(lobby.getStats('room', 'stats')!)).toEqual({
-        name: `host's room`,
         id: 'stats',
+        roomId: 'room',
+        name: `host's room`,
         headings: ['Player', 'SteveKill', 'UserDeath', 'UserWin', 'HeartPickup', 'OrbPickup'],
         rows: [
-          ['host', 0, 0, 0, 0, 2],
-          ['player', 0, 0, 0, 2, 0],
+          ['host', 0, 0, 1, 2, 0],
+          ['player', 1, 1, 1, 0, 2],
+          ['player2', 0, 0, 0, 0, 0],
         ],
       });
     });
