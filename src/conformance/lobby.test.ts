@@ -348,18 +348,34 @@ describe('lobby conformance tests', () => {
         () => 'chat',
         () => 'stats',
       );
-      const user = testSocket('id', 'name');
+      const host = testSocket('hostId', 'host');
+      const player = testSocket('playerId', 'player');
 
-      handleOpen(user);
-      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
-      handleMessage(user, M.cStartRun({ forced: false }).toBinary(), true);
-      handleMessage(user, M.cRunOver({}).toBinary(), true);
+      handleOpen(host);
+      handleOpen(player);
+      handleMessage(host, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "host's room" }).toBinary(), true);
+      handleMessage(player, M.cJoinRoom({ id: 'room' }).toBinary(), true);
+      handleMessage(host, M.cStartRun({ forced: false }).toBinary(), true);
+
+      handleMessage(player, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
+      handleMessage(player, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
+
+      // StartRun can be sent midgame, don't obliterate stats
+      handleMessage(host, M.cStartRun({ forced: false }).toBinary(), true);
+
+      handleMessage(host, M.cPlayerPickup({ kind: { case: 'orb', value: { id: 3 } } }).toBinary(), true);
+      handleMessage(host, M.cPlayerPickup({ kind: { case: 'orb', value: { id: 7 } } }).toBinary(), true);
+
+      handleMessage(host, M.cRunOver({}).toBinary(), true);
 
       expect(JSON.parse(lobby.getStats('room', 'stats')!)).toEqual({
-        name: `name's room`,
+        name: `host's room`,
         id: 'stats',
         headings: ['Player', 'SteveKill', 'UserDeath', 'UserWin', 'HeartPickup', 'OrbPickup'],
-        rows: [['name', 0, 0, 0, 0, 0]],
+        rows: [
+          ['host', 0, 0, 0, 0, 2],
+          ['player', 0, 0, 0, 2, 0],
+        ],
       });
     });
     it('returns undefined for invalid stats ids', () => {
