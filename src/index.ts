@@ -78,8 +78,9 @@ const bindHandlers = (serverName?: string) =>
       message: handleMessage,
     })
     .get(`${API_PATH}/health`, (res) => {
+      const jsonStr = JSON.stringify(lobby.getInfo());
       setCorsHeaders(res);
-      res.writeStatus('200 OK').end();
+      res.writeStatus('200 OK').writeHeader('Content-Type', 'application/json; charset=utf-8').end(jsonStr);
     })
     .get(`${API_PATH}/stats/:roomid/:statsid`, (res, req) => {
       setCorsHeaders(res);

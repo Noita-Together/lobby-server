@@ -48,6 +48,20 @@ export class LobbyState implements Handlers<LobbyActions> {
   }
 
   /**
+   * Return the number of rooms and users present in the lobby.
+   *
+   * Note: users may be disconnected but still represented here,
+   * so long as they are included in a room with at least one
+   * connected user.
+   */
+  getInfo() {
+    return {
+      rooms: this.rooms.size,
+      users: this.users.size,
+    };
+  }
+
+  /**
    * Responsible for handling reconnection logic. Returns either a
    * previously-present UserState instance or a new one.
    *
