@@ -1,5 +1,5 @@
-import * as NT from '../gen/messages_pb';
 import { M } from '../util';
+import { NT } from '../gen/pbjs_pb';
 
 import { RoomState } from './room';
 import { LobbyState } from './lobby';
@@ -111,7 +111,7 @@ export class UserState implements IUser {
    * @param message The Envelope, or encoded Envelope, to send
    */
   send(message: Uint8Array | NT.Envelope) {
-    this.socket?.send(message instanceof Uint8Array ? message : message.toBinary(), true, false);
+    this.socket?.send(message instanceof Uint8Array ? message : NT.Envelope.encode(message).finish(), true, false);
   }
 
   /**
@@ -121,7 +121,12 @@ export class UserState implements IUser {
    * @param message The Envelope, or encoded Envelope, to send
    */
   broadcast(topic: string, message: Uint8Array | NT.Envelope) {
-    this.socket?.publish(topic, message instanceof Uint8Array ? message : message.toBinary(), true, false);
+    this.socket?.publish(
+      topic,
+      message instanceof Uint8Array ? message : NT.Envelope.encode(message).finish(),
+      true,
+      false,
+    );
   }
 
   /**

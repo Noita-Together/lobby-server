@@ -1,5 +1,4 @@
-import { PartialMessage } from '@bufbuild/protobuf';
-import { Envelope } from '../gen/messages_pb';
+import { NT } from '../gen/pbjs_pb';
 import { createJwtFns } from '../jwt';
 import { AuthProvider, ClientAuth } from '../runtypes/client_auth';
 import { LobbyState, SYSTEM_USER } from '../state/lobby';
@@ -10,7 +9,7 @@ import { RecognizedString } from 'uWebSockets.js';
 type sentMessage = {
   topic: string | null;
   user: ClientAuthWebSocket | null;
-  message: PartialMessage<Envelope>;
+  message: NT.Envelope;
 };
 
 const createTestEnv = (
@@ -25,10 +24,31 @@ const createTestEnv = (
   const closedSockets: { socket: ClientAuthWebSocket; code?: number; shortMessage?: RecognizedString }[] = [];
   const subscribed: Map<ClientAuthWebSocket, Set<string>> = new Map();
 
+  const expectLobbyAction = <K extends keyof NT.ILobbyAction>(key: K) => {
+    const env = sentMessages.shift()?.message!;
+    expect(env).toBeDefined();
+    const la = env.lobbyAction! as NT.LobbyAction;
+    expect(la).toBeDefined();
+    expect(la.action).toEqual(key);
+    expect(la[key]).not.toBeUndefined();
+    expect(la[key]).not.toBeNull();
+    return la[key] as Exclude<(typeof la)[K], undefined | null>;
+  };
+  const expectGameAction = <K extends keyof NT.IGameAction>(key: K) => {
+    const env = sentMessages.shift()?.message!;
+    expect(env).toBeDefined();
+    const ga = env.gameAction! as NT.GameAction;
+    expect(ga).toBeDefined();
+    expect(ga.action).toEqual(key);
+    expect(ga[key]).not.toBeUndefined();
+    expect(ga[key]).not.toBeNull();
+    return ga[key] as Exclude<(typeof ga)[K], undefined | null>;
+  };
+
   const publishers = BindPublishers(
     {
-      publish: (topic: string, message: Uint8Array | Envelope) => {
-        const decoded = message instanceof Uint8Array ? Envelope.fromBinary(message) : message;
+      publish: (topic: string, message: Uint8Array | NT.Envelope) => {
+        const decoded = message instanceof Uint8Array ? NT.Envelope.decode(message) : message;
         sentMessages.push({ topic, message: decoded, user: null });
       },
     } as any,
@@ -61,7 +81,7 @@ const createTestEnv = (
 
     const user: ClientAuthWebSocket & { toJSON: () => any; toString: () => string } = {
       send(msg: Uint8Array): number {
-        sentMessages.push({ topic: null, message: Envelope.fromBinary(msg), user });
+        sentMessages.push({ topic: null, message: NT.Envelope.decode(msg), user });
         return 1;
       },
       getUserData(): TaggedClientAuth {
@@ -74,7 +94,7 @@ const createTestEnv = (
         closedSockets.push({ socket: user });
       },
       publish(topic: string, msg: Uint8Array) {
-        sentMessages.push({ topic, message: Envelope.fromBinary(msg), user });
+        sentMessages.push({ topic, message: NT.Envelope.decode(msg), user });
         return true;
       },
       subscribe(topic: string) {
@@ -105,6 +125,8 @@ const createTestEnv = (
     subscribed,
     lobby,
     users,
+    expectGameAction,
+    expectLobbyAction,
     testSocket,
     handleUpgrade,
     handleOpen,
@@ -158,32 +180,27 @@ describe('lobby conformance tests', () => {
 
   describe('non-mocked ids', () => {
     it('generates uuids like normal', () => {
-      const { testSocket, handleOpen, handleMessage, sentMessages } = createTestEnv(false);
+      const { testSocket, handleOpen, handleMessage, sentMessages, expectGameAction, expectLobbyAction } =
+        createTestEnv(false);
       const user = testSocket('id', 'name');
 
       handleOpen(user);
 
       // create a room - should have a uuid for its id
-      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
 
-      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomCreated?.case).toEqual('sRoomCreated');
-      if (sRoomCreated?.case === 'sRoomCreated') {
-        expect(sRoomCreated.value.id).toMatch(uuidRE);
-      }
+      const sRoomCreated = expectLobbyAction('sRoomCreated');
+      expect(sRoomCreated.id).toMatch(uuidRE);
 
-      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      expectLobbyAction('sRoomAddToList');
+
       expect(sentMessages).toEqual([]);
 
       // send a chat - should have a uuid for its id
-      handleMessage(user, M.cChat({ message: 'hi' }).toBinary(), true);
+      handleMessage(user, M.cChat({ message: 'hi' }, true), true);
 
-      const sChat = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sChat?.case).toEqual('sChat');
-      if (sChat?.case === 'sChat') {
-        expect(sChat.value.id).toMatch(uuidRE);
-      }
+      const sChat = expectGameAction('sChat');
+      expect(sChat.id).toMatch(uuidRE);
 
       expect(sentMessages).toEqual([]);
     });
@@ -191,37 +208,32 @@ describe('lobby conformance tests', () => {
 
   describe('disconnect handling', () => {
     it('cleans up a room when all active users have disconnected', () => {
-      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv(false);
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages, expectGameAction, expectLobbyAction } =
+        createTestEnv(false);
       const user = testSocket('id', 'name');
 
       handleOpen(user);
 
       // create a room - should have a uuid for its id
-      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
 
-      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomCreated?.case).toEqual('sRoomCreated');
-      if (sRoomCreated?.case === 'sRoomCreated') {
-        expect(sRoomCreated.value.id).toMatch(uuidRE);
-      }
+      const sRoomCreated = expectLobbyAction('sRoomCreated');
+      expect(sRoomCreated.id).toMatch(uuidRE);
 
-      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      expectLobbyAction('sRoomAddToList');
       expect(sentMessages).toEqual([]);
 
       handleClose(user, 1006, Buffer.from('test'));
 
-      const sRoomDeleted = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomDeleted?.case).toEqual('sRoomDeleted');
-      if (sRoomDeleted?.case === 'sRoomDeleted') {
-        expect(sRoomDeleted.value.id).toMatch(uuidRE);
-      }
+      const sRoomDeleted = expectLobbyAction('sRoomDeleted');
+      expect(sRoomDeleted.id).toMatch(uuidRE);
 
       expect(sentMessages).toEqual([]);
     });
 
     it('leaves a room active when at least one connected user is present', () => {
-      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv(false);
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages, expectGameAction, expectLobbyAction } =
+        createTestEnv(false);
       const user = testSocket('id', 'name');
       const user2 = testSocket('id2', 'name2');
 
@@ -229,38 +241,40 @@ describe('lobby conformance tests', () => {
       handleOpen(user2);
 
       // create a room - should have a uuid for its id
-      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
 
-      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomCreated?.case).toEqual('sRoomCreated');
-      let roomId: string;
-      if (sRoomCreated?.case === 'sRoomCreated') {
-        expect(sRoomCreated.value.id).toMatch(uuidRE);
-        roomId = sRoomCreated.value.id!;
-      } else {
-        throw new Error('abort');
-      }
+      const sRoomCreated = expectLobbyAction('sRoomCreated');
+      expect(sRoomCreated.id).toMatch(uuidRE);
+      const roomId = sRoomCreated.id;
 
-      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      expectLobbyAction('sRoomAddToList');
       expect(sentMessages).toEqual([]);
 
-      handleMessage(user2, M.cJoinRoom({ id: roomId }).toBinary(), true);
+      handleMessage(user2, M.cJoinRoom({ id: roomId }, true), true);
 
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
+      expectLobbyAction('sUserJoinedRoom');
+      expectLobbyAction('sJoinRoomSuccess');
+      expectLobbyAction('sRoomFlagsUpdated');
+      expectLobbyAction('sUserReadyState');
 
       handleClose(user, 1006, Buffer.from('test'));
 
       // rooms are deleted when the host disconnects
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomDeleted');
+      expectLobbyAction('sRoomDeleted');
       expect(sentMessages).toEqual([]);
     });
 
     it('allows disconnected users to rejoin locked rooms. owner retains ownership', () => {
-      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages, lobby } = createTestEnv(false);
+      const {
+        testSocket,
+        handleOpen,
+        handleMessage,
+        handleClose,
+        sentMessages,
+        lobby,
+        expectGameAction,
+        expectLobbyAction,
+      } = createTestEnv(false);
       const owner = testSocket('ownerid', 'owner');
       const player = testSocket('playerid', 'player');
 
@@ -268,32 +282,25 @@ describe('lobby conformance tests', () => {
       handleOpen(player);
 
       // create a room - should have a uuid for its id
-      handleMessage(owner, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+      handleMessage(owner, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
 
-      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomCreated?.case).toEqual('sRoomCreated');
-      let roomId: string;
-      if (sRoomCreated?.case === 'sRoomCreated') {
-        expect(sRoomCreated.value.id).toMatch(uuidRE);
-        roomId = sRoomCreated.value.id!;
-      } else {
-        throw new Error('abort');
-      }
+      const sRoomCreated = expectLobbyAction('sRoomCreated');
+      expect(sRoomCreated.id).toMatch(uuidRE);
+      const roomId = sRoomCreated.id!;
 
-      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      const sRoomAddToList = expectLobbyAction('sRoomAddToList');
       expect(sentMessages).toEqual([]);
 
-      handleMessage(player, M.cJoinRoom({ id: roomId }).toBinary(), true);
+      handleMessage(player, M.cJoinRoom({ id: roomId }, true), true);
 
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserJoinedRoom');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
+      expectLobbyAction('sUserJoinedRoom');
+      expectLobbyAction('sJoinRoomSuccess');
+      expectLobbyAction('sRoomFlagsUpdated');
+      expectLobbyAction('sUserReadyState');
       expect(sentMessages).toEqual([]);
 
-      handleMessage(owner, M.cRoomUpdate({ locked: true }).toBinary(), true);
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomUpdated');
+      handleMessage(owner, M.cRoomUpdate({ locked: true }, true), true);
+      expectLobbyAction('sRoomUpdated');
       expect(sentMessages).toEqual([]);
 
       handleClose(player, 1006, Buffer.from('test'));
@@ -301,18 +308,19 @@ describe('lobby conformance tests', () => {
       // player can rejoin
       const player2 = testSocket('playerid', 'player');
       handleOpen(player2);
-      handleMessage(player2, M.cJoinRoom({ id: roomId }).toBinary(), true);
+      handleMessage(player2, M.cJoinRoom({ id: roomId }, true), true);
 
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sJoinRoomSuccess');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sRoomFlagsUpdated');
-      expect(sentMessages.shift()?.message.kind?.value?.action?.case).toEqual('sUserReadyState');
+      expectLobbyAction('sJoinRoomSuccess');
+      expectLobbyAction('sRoomFlagsUpdated');
+      expectLobbyAction('sUserReadyState');
       expect(sentMessages).toEqual([]);
     });
   });
 
   describe('dev mode', () => {
     it('rejects room creation from non-devs', () => {
-      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages } = createTestEnv(true);
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages, expectGameAction, expectLobbyAction } =
+        createTestEnv(true);
       const user = testSocket('id', 'name');
       const dev = testSocket('devid', 'myndzi');
 
@@ -320,22 +328,17 @@ describe('lobby conformance tests', () => {
       handleOpen(dev);
 
       // create a room - should have a uuid for its id
-      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
 
-      const sRoomCreateFailed = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomCreateFailed?.case).toEqual('sRoomCreateFailed');
+      expectLobbyAction('sRoomCreateFailed');
       expect(sentMessages).toEqual([]);
 
-      handleMessage(dev, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: 'dev room' }).toBinary(), true);
+      handleMessage(dev, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: 'dev room' }, true), true);
 
-      const sRoomCreated = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomCreated?.case).toEqual('sRoomCreated');
-      if (sRoomCreated?.case === 'sRoomCreated') {
-        expect(sRoomCreated.value.id).toMatch(uuidRE);
-      }
+      const sRoomCreated = expectLobbyAction('sRoomCreated');
+      expect(sRoomCreated.id).toMatch(uuidRE);
 
-      const sRoomAddToList = sentMessages.shift()?.message.kind?.value?.action;
-      expect(sRoomAddToList?.case).toEqual('sRoomAddToList');
+      expectLobbyAction('sRoomAddToList');
       expect(sentMessages).toEqual([]);
     });
   });
@@ -355,30 +358,30 @@ describe('lobby conformance tests', () => {
       handleOpen(host);
       handleOpen(player);
       handleOpen(player2);
-      handleMessage(host, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "host's room" }).toBinary(), true);
-      handleMessage(player, M.cJoinRoom({ id: 'room' }).toBinary(), true);
-      handleMessage(host, M.cStartRun({ forced: false }).toBinary(), true);
+      handleMessage(host, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "host's room" }, true), true);
+      handleMessage(player, M.cJoinRoom({ id: 'room' }, true), true);
+      handleMessage(host, M.cStartRun({ forced: false }, true), true);
 
-      handleMessage(host, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
-      handleMessage(host, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
+      handleMessage(host, M.cPlayerPickup({ heart: { hpPerk: true } }, true), true);
+      handleMessage(host, M.cPlayerPickup({ heart: { hpPerk: true } }, true), true);
 
       // support users joining mid-run
-      handleMessage(player2, M.cJoinRoom({ id: 'room' }).toBinary(), true);
-      handleMessage(host, M.cStartRun({ forced: false }).toBinary(), true);
+      handleMessage(player2, M.cJoinRoom({ id: 'room' }, true), true);
+      handleMessage(host, M.cStartRun({ forced: false }, true), true);
 
-      handleMessage(player, M.cPlayerPickup({ kind: { case: 'orb', value: { id: 3 } } }).toBinary(), true);
-      handleMessage(player, M.cPlayerPickup({ kind: { case: 'orb', value: { id: 7 } } }).toBinary(), true);
-      handleMessage(player, M.cAngerySteve().toBinary(), true);
-      handleMessage(player, M.cPlayerDeath({ isWin: false }).toBinary(), true);
+      handleMessage(player, M.cPlayerPickup({ orb: { id: 3 } }, true), true);
+      handleMessage(player, M.cPlayerPickup({ orb: { id: 7 } }, true), true);
+      handleMessage(player, M.cAngerySteve({}, true), true);
+      handleMessage(player, M.cPlayerDeath({ isWin: false }, true), true);
 
       // win deaths don't count
-      handleMessage(host, M.cPlayerDeath({ isWin: true }).toBinary(), true);
-      handleMessage(player, M.cPlayerDeath({ isWin: true }).toBinary(), true);
+      handleMessage(host, M.cPlayerDeath({ isWin: true }, true), true);
+      handleMessage(player, M.cPlayerDeath({ isWin: true }, true), true);
 
-      handleMessage(host, M.cRunOver({}).toBinary(), true);
+      handleMessage(host, M.cRunOver({}, true), true);
 
       // stats after game is over don't accrue
-      handleMessage(host, M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } }).toBinary(), true);
+      handleMessage(host, M.cPlayerPickup({ heart: { hpPerk: true } }, true), true);
 
       expect(JSON.parse(lobby.getStats('room', 'stats')!)).toEqual({
         id: 'stats',
@@ -406,22 +409,18 @@ describe('lobby conformance tests', () => {
       const user = testSocket('id', 'name');
 
       handleOpen(user);
-      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }).toBinary(), true);
-      handleMessage(user, M.cStartRun({ forced: false }).toBinary(), true);
-      handleMessage(user, M.cRunOver({}).toBinary(), true);
-      handleMessage(user, M.cRoomDelete({ id: 'room' }).toBinary(), true);
+      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
+      handleMessage(user, M.cStartRun({ forced: false }, true), true);
+      handleMessage(user, M.cRunOver({}, true), true);
+      handleMessage(user, M.cRoomDelete({ id: 'room' }, true), true);
 
       expect(lobby.getStats('room', 'stats')).toBeUndefined();
     });
   });
 
   describe('message handlers', () => {
-    type clientMessage = [user: ClientAuthWebSocket, message: Envelope];
-    const sm = <E extends PartialMessage<Envelope>>(
-      topic: string | null,
-      user: ClientAuthWebSocket | null,
-      action: E,
-    ) => ({
+    type clientMessage = [user: ClientAuthWebSocket, message: NT.Envelope];
+    const sm = <E extends NT.IEnvelope>(topic: string | null, user: ClientAuthWebSocket | null, action: E) => ({
       topic,
       message: action,
       user,
@@ -2509,20 +2508,20 @@ describe('lobby conformance tests', () => {
 
     ///// game messages /////
 
-    type gmTest = ['all' | 'others' | 'toHost' | 'byHost' | 'never', Envelope];
+    type gmTest = ['all' | 'others' | 'toHost' | 'byHost' | 'never', NT.Envelope];
 
     const gameMessages: gmTest[] = [
       ['others', M.cPlayerUpdate({ curHp: 123 })],
       ['never', M.cPlayerUpdateInventory({ spells: [{ index: 1 }], wands: [], items: [] })],
       ['byHost', M.cHostItemBank({ gold: 1, items: [], objects: [], spells: [], wands: [] })],
-      ['byHost', M.cHostUserTake({ id: '1', success: true, userId: '123' })],
-      ['byHost', M.cHostUserTakeGold({ amount: 1, success: true, userId: '123' })],
+      ['byHost', M.cHostUserTake({ id: '123', success: true, userId: '1' })],
+      ['byHost', M.cHostUserTakeGold({ amount: 1, success: true, userId: '1' })],
       ['all', M.cPlayerAddGold({ amount: 1 })],
       ['toHost', M.cPlayerTakeGold({ amount: 1 })],
-      ['all', M.cPlayerAddItem({ item: { case: 'spells', value: { list: [] } } })],
-      ['toHost', M.cPlayerTakeItem({ id: '1' })],
-      ['others', M.cPlayerPickup({ kind: { case: 'heart', value: { hpPerk: true } } })],
-      ['others', M.cPlayerPickup({ kind: { case: 'orb', value: { id: 1 } } })],
+      ['all', M.cPlayerAddItem({ spells: { list: [] } })],
+      ['toHost', M.cPlayerTakeItem({ id: '123' })],
+      ['others', M.cPlayerPickup({ heart: { hpPerk: true } })],
+      ['others', M.cPlayerPickup({ orb: { id: 1 } })],
       ['others', M.cNemesisAbility({ gameId: '1' })],
       ['others', M.cNemesisPickupItem({ gameId: '1' })],
       ['others', M.cPlayerNewGamePlus({ amount: 1 })],
@@ -2532,46 +2531,38 @@ describe('lobby conformance tests', () => {
       ['others', M.cRespawnPenalty({ deaths: 1 })],
       ['others', M.cPlayerDeath({ isWin: true })],
       ['others', M.cPlayerDeath({ isWin: false })],
-      ['others', M.playerMove({ frames: [{ x: 1, y: 2 }] })],
-      ['never', M.playerMove({ userId: 'disallowed from client', frames: [{ x: 1, y: 2 }] })],
+      ['others', M.cPlayerMove({ xInit: 1, yInit: 2 })],
+      ['never', M.cPlayerMove({ userId: 'disallowed from client', xInit: 1, yInit: 2 })],
     ];
 
-    const transformC2S = (env: Envelope, userId: string) => {
-      const action = env.kind.value!.action;
-      if (action.case === 'playerMove') {
-        return new Envelope({
-          kind: {
-            case: 'gameAction',
-            value: {
-              action: {
-                case: 'playerMove',
-                value: {
-                  ...action.value,
-                  userId,
-                },
-              },
+    const transformC2S = (env: NT.Envelope, userId: string) => {
+      if (env.gameAction?.cPlayerMove) {
+        const frames = env.gameAction!.cPlayerMove!;
+        return NT.Envelope.fromObject({
+          gameAction: {
+            sPlayerMoves: {
+              userFrames: [{ ...frames, userId }],
             },
           },
         });
-      }
-      return new Envelope({
-        kind: {
-          case: env.kind.case!,
-          value: {
-            action: {
-              case: action.case!.replace(/^c/, 's'),
-              value: {
-                userId,
-                ...action.value!,
-              },
+      } else {
+        const payload = env.gameAction! as NT.GameAction;
+        const cAction = payload.action!;
+        const sAction = cAction.replace(/^c/, 's');
+        const res = NT.Envelope.fromObject({
+          gameAction: {
+            [sAction]: {
+              ...payload.toJSON()[cAction],
+              userId,
             },
           },
-        },
-      } as any);
+        });
+        return res;
+      }
     };
 
     for (const [type, env] of gameMessages) {
-      const name = env.kind.value!.action.case;
+      const name = (env.gameAction! as NT.GameAction).action;
       tests.push({
         name: `${name} - silent failure (inactive run)`,
         clientMessages: (users) => [...u1create_u2join_no_password.clientMessages(users), [users.user1, env]],
@@ -2612,6 +2603,34 @@ describe('lobby conformance tests', () => {
       }
     }
 
+    const mergePrototype = (obj: object) => {
+      const res: any = {};
+      for (const [k, v] of Object.entries(Object.getPrototypeOf(obj))) {
+        if (typeof v === 'function') continue;
+        res[k] = v;
+      }
+      return { ...res, ...obj };
+    };
+    const getAction = (env: NT.Envelope) => {
+      let action: string | undefined = undefined;
+      let oneofValue: NT.GameAction[keyof NT.GameAction] | NT.LobbyAction[keyof NT.LobbyAction] | undefined = undefined;
+
+      switch (env.kind) {
+        case 'gameAction':
+          const gameAction = NT.GameAction.fromObject(env.gameAction!);
+          action = gameAction.action!;
+          oneofValue = gameAction[gameAction.action!];
+          return { kind: action, [action]: mergePrototype(oneofValue!) };
+        case 'lobbyAction':
+          const lobbyAction = NT.LobbyAction.fromObject(env.lobbyAction!);
+          action = lobbyAction.action!;
+          oneofValue = lobbyAction[lobbyAction.action!];
+          return { kind: action, [action]: mergePrototype(oneofValue!) };
+        default:
+          throw new Error(`Unknown Envelope.kind: ${env.kind}`);
+      }
+    };
+
     it.each(tests)('$name', ({ clientMessages, serverMessages }) => {
       let roomId = 1;
       let chatId = 1;
@@ -2637,20 +2656,20 @@ describe('lobby conformance tests', () => {
 
       const toSend = clientMessages(users);
       for (const [user, message] of toSend) {
-        handleMessage(user, message.toBinary(), true);
+        handleMessage(user, NT.Envelope.encode(message).finish(), true);
       }
 
       const expectedMessages = serverMessages(users);
-      expect(sentMessages.map((v) => v.message.kind?.value?.action?.case)).toEqual(
-        expectedMessages.map((v) => v.message.kind?.value?.action?.case),
+      expect(sentMessages.map((env) => getAction(env.message))).toEqual(
+        expectedMessages.map((env) => getAction(env.message)),
       );
       if (sentMessages.length === expectedMessages.length) {
         for (const [idx, sent] of sentMessages.entries()) {
           const exp = expectedMessages[idx];
-          const sentM = sent.message.kind?.value?.action?.case;
-          const expM = sent.message.kind?.value?.action?.case;
+          const sentM = getAction(sent.message);
+          const expM = getAction(exp.message);
           try {
-            expect(sent).toStrictEqual(exp);
+            expect(sentM).toStrictEqual(expM);
           } catch (e) {
             if (e instanceof Error) {
               e.message = `Expected: ${expM} Got: ${sentM}\n\n${e.message}`;

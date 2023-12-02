@@ -1,0 +1,115 @@
+{
+  "nested": {
+    "Enum": {
+      "values": {
+        "ENUM_UNSPECIFIED": 0,
+        "ENUM_ONE": 1,
+        "ENUM_TWO": 2
+      }
+    },
+    "Message": {
+      "fields": {
+        "lMessage": {
+          "type": "Message",
+          "id": 1
+        },
+        "singleInt32": {
+          "type": "int32",
+          "id": 11
+        },
+        "singleInt64": {
+          "type": "int64",
+          "id": 12
+        },
+        "singleUint32": {
+          "type": "uint32",
+          "id": 13
+        },
+        "singleUint64": {
+          "type": "uint64",
+          "id": 14
+        },
+        "singleSint32": {
+          "type": "sint32",
+          "id": 15
+        },
+        "singleSint64": {
+          "type": "sint64",
+          "id": 16
+        },
+        "singleBool": {
+          "type": "bool",
+          "id": 17
+        },
+        "singleEnum": {
+          "type": "Enum",
+          "id": 18
+        },
+        "singleFixed64": {
+          "type": "fixed64",
+          "id": 19
+        },
+        "singleSfixed64": {
+          "type": "sfixed64",
+          "id": 20
+        },
+        "singleDouble": {
+          "type": "double",
+          "id": 21
+        },
+        "singleString": {
+          "type": "string",
+          "id": 22
+        },
+        "singleBytes": {
+          "type": "bytes",
+          "id": 23
+        },
+        "singleFixed32": {
+          "type": "fixed32",
+          "id": 24
+        },
+        "singleSfixed32": {
+          "type": "sfixed32",
+          "id": 25
+        },
+        "singleFloat": {
+          "type": "float",
+          "id": 26
+        },
+        "singleMessage": {
+          "type": "Message",
+          "id": 27
+        },
+        "repeatedInt32": {
+          "rule": "repeated",
+          "type": "int32",
+          "id": 111
+        },
+        "repeatedString": {
+          "rule": "repeated",
+          "type": "string",
+          "id": 122
+        },
+        "repeatedBytes": {
+          "rule": "repeated",
+          "type": "bytes",
+          "id": 123
+        },
+        "repeatedMessage": {
+          "rule": "repeated",
+          "type": "Message",
+          "id": 127
+        },
+        "unpackedInt32": {
+          "rule": "repeated",
+          "type": "int32",
+          "id": 211,
+          "options": {
+            "packed": false
+          }
+        }
+      }
+    }
+  }
+}

@@ -2,4 +2,9 @@
 
 HERE="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-(cd "$HERE/../../.." &&  protoc -I=. --plugin ./node_modules/.bin/protoc-gen-es --es_out . --es_opt target=ts ./src/protohax/fixtures/protohax.proto)
+(
+  cd "$HERE/../../.." && \
+  npx pbjs --es6 -w es6 -t static-module ./src/protohax/fixtures/protohax.proto -o ./src/protohax/fixtures/protohax_pb.js && \
+  npx pbts -o ./src/protohax/fixtures/protohax_pb.d.ts ./src/protohax/fixtures/protohax_pb.js && \
+  npx pbjs -t json ./src/protohax/fixtures/protohax.proto -o ./src/protohax/fixtures/protohax_pb.json
+)

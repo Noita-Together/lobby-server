@@ -3,11 +3,13 @@ FROM node:21-slim AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm install
-COPY buf.gen.yaml .
 COPY proto/ ./proto/
-RUN npx buf generate proto
-COPY tsconfig.json .
+COPY tsconfig.json babel.config.js ./
 COPY src/ ./src/
+RUN mkdir -p ./src/gen && \
+    npx pbjs --es6 -w es6 -t static-module proto/messages.proto > ./src/gen/pbjs_pb.js && \
+    npx pbts ./src/gen/pbjs_pb.js > ./src/gen/pbjs_pb.d.ts && \
+    npx pbjs -t json proto/messages.proto > ./src/gen/pbjs_pb.json
 
 # run tests
 COPY jest.config.js .

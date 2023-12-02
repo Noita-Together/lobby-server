@@ -1,74 +1,11 @@
-import { PlainMessage } from '@bufbuild/protobuf';
-import { Envelope } from './gen/messages_pb';
-import { createPlayerPosition, lastPlayerPosition, maybePlayerMove, tagPlayerMove } from './protoutil';
+import { NT } from './gen/pbjs_pb';
+import { maybePlayerMove, tagPlayerMove } from './protoutil';
 
 const asSingle = (v: number) => {
   const buf = Buffer.alloc(4);
   buf.writeFloatBE(v, 0);
   return buf.readFloatBE(0);
 };
-
-describe('lastPlayerPosition', () => {
-  it('works as expected', () => {
-    const frame = (x: number, y: number) => ({ x, y, anim: 1, armR: 0.872, armScaleY: 1, held: 1, scaleX: 1 });
-
-    const encoded = Buffer.from(
-      new Envelope({
-        kind: {
-          case: 'gameAction',
-          value: {
-            action: {
-              case: 'playerMove',
-              value: {
-                frames: [frame(1, 2), frame(3, 4)],
-              },
-            },
-          },
-        },
-      }).toBinary(),
-    );
-
-    const playerMovePayload = maybePlayerMove(encoded);
-
-    expect(playerMovePayload).toBeDefined();
-    const pos = lastPlayerPosition(playerMovePayload!);
-    expect(pos).toEqual({ x: 3, y: 4 });
-  });
-});
-
-describe('createPlayerPosition', () => {
-  it('works as expected', () => {
-    const x = 1.3,
-      y = 5.2;
-
-    const expectedFrame = {
-      x: asSingle(x),
-      y: asSingle(y),
-    };
-
-    const ppId = Buffer.from('12345');
-    const playerPosition = createPlayerPosition(x, y, ppId);
-
-    expect(playerPosition).toBeDefined();
-
-    const env = Envelope.fromBinary(playerPosition!);
-
-    expect(env).toEqual({
-      kind: {
-        case: 'gameAction',
-        value: {
-          action: {
-            case: 'playerPosition',
-            value: {
-              userId: '12345',
-              frame: expectedFrame,
-            },
-          },
-        },
-      },
-    } as PlainMessage<Envelope>);
-  });
-});
 
 describe('PlayerMove userId tagging', () => {
   it('works with empty frames', () => {
@@ -77,100 +14,136 @@ describe('PlayerMove userId tagging', () => {
     expect(mpm).toBeDefined();
     const tagged = tagPlayerMove(mpm!, Buffer.from('foo'));
     expect(tagged).toBeDefined();
-    expect(Envelope.fromBinary(tagged!)).toEqual({
-      kind: {
-        case: 'gameAction',
-        value: {
-          action: {
-            case: 'playerMove',
-            value: {
+    expect(NT.Envelope.decode(tagged!).toJSON()).toEqual({
+      gameAction: {
+        sPlayerMoves: {
+          userFrames: [
+            {
               userId: 'foo',
-              frames: [],
             },
-          },
+          ],
         },
       },
     });
   });
   it('works as expected', () => {
-    const frame = { x: 1.3, y: -1.3, anim: 1, armR: 0.872, armScaleY: 1, held: 1, scaleX: 1 };
-    const mangledFrame = {
-      ...frame,
-      x: asSingle(frame.x),
-      y: asSingle(frame.y),
-      armR: asSingle(frame.armR),
+    const frames: NT.ICompactPlayerFrames = {
+      xInit: 1.3,
+      xDeltas: [1, -1],
+      yInit: -1.3,
+      yDeltas: [1, -1],
+      animIdx: [1],
+      animVal: [1],
+      armR: [1],
+      armScaleY: 1,
+      scaleX: 1,
+      heldIdx: [1],
+      heldVal: [1],
     };
 
-    const encoded = Buffer.from(
-      new Envelope({
-        kind: {
-          case: 'gameAction',
-          value: {
-            action: {
-              case: 'playerMove',
-              value: {
-                frames: new Array(15).fill(frame),
-              },
-            },
-          },
-        },
-      }).toBinary(),
-    );
-
-    const playerMovePayload = maybePlayerMove(encoded);
-
+    const encoded = NT.Envelope.encode({ gameAction: { cPlayerMove: frames } }).finish();
+    const playerMovePayload = maybePlayerMove(Buffer.from(encoded));
     expect(playerMovePayload).toBeDefined();
 
     const pmId = Buffer.from('12345');
-
     const tagged = tagPlayerMove(playerMovePayload!, pmId);
-
     expect(tagged).toBeDefined();
 
-    const env = Envelope.fromBinary(tagged!);
-
-    expect(env).toEqual({
-      kind: {
-        case: 'gameAction',
-        value: {
-          action: {
-            case: 'playerMove',
-            value: {
+    const decoded = NT.Envelope.decode(tagged!);
+    const expected: NT.IEnvelope = {
+      gameAction: {
+        sPlayerMoves: {
+          userFrames: [
+            {
+              ...frames,
               userId: '12345',
-              frames: new Array(15).fill(mangledFrame),
+              xInit: asSingle(frames.xInit!),
+              yInit: asSingle(frames.yInit!),
             },
-          },
+          ],
         },
       },
-    } as PlainMessage<Envelope>);
+    };
+    expect(decoded.toJSON()).toEqual(expected);
   });
-  it('refuses client-supplied userId', () => {
-    const frame = { x: 1.3, y: -1.3, anim: 1, armR: 0.872, armScaleY: 1, held: 1, scaleX: 1 };
-    const encoded = Buffer.from(
-      new Envelope({
-        kind: {
-          case: 'gameAction',
-          value: {
-            action: {
-              case: 'playerMove',
-              value: {
-                frames: new Array(15).fill(frame),
-                userId: 'oh noes',
-              },
-            },
-          },
-        },
-      }).toBinary(),
-    );
+  // protobuf.js fails to merge messages when decoding
+  it.skip('correctly supports concatenation (protobuf.js)', () => {
+    const frames: NT.ICompactPlayerFrames = {
+      xInit: 1.3,
+      xDeltas: [1, -1],
+      yInit: -1.3,
+      yDeltas: [1, -1],
+      animIdx: [1],
+      animVal: [1],
+      armR: [1],
+      armScaleY: 1,
+      scaleX: 1,
+      heldIdx: [1],
+      heldVal: [1],
+    };
 
-    const playerMovePayload = maybePlayerMove(encoded);
-
+    const encoded = NT.Envelope.encode({ gameAction: { cPlayerMove: frames } }).finish();
+    const playerMovePayload = maybePlayerMove(Buffer.from(encoded));
     expect(playerMovePayload).toBeDefined();
 
     const pmId = Buffer.from('12345');
-
     const tagged = tagPlayerMove(playerMovePayload!, pmId);
+    expect(tagged).toBeDefined();
 
+    const encoded2 = NT.Envelope.encode({ gameAction: { cPlayerMove: frames } }).finish();
+    const playerMovePayload2 = maybePlayerMove(Buffer.from(encoded2));
+    expect(playerMovePayload2).toBeDefined();
+
+    const pmId2 = Buffer.from('6789');
+    const tagged2 = tagPlayerMove(playerMovePayload2!, pmId2);
+    expect(tagged2).toBeDefined();
+
+    const concatenated = Buffer.concat([tagged!, tagged2!]);
+    const decoded = NT.Envelope.decode(concatenated);
+
+    const expected: NT.IEnvelope = {
+      gameAction: {
+        sPlayerMoves: {
+          userFrames: [
+            {
+              ...frames,
+              userId: '12345',
+              xInit: asSingle(frames.xInit!),
+              yInit: asSingle(frames.yInit!),
+            },
+            {
+              ...frames,
+              userId: '6789',
+              xInit: asSingle(frames.xInit!),
+              yInit: asSingle(frames.yInit!),
+            },
+          ],
+        },
+      },
+    };
+    expect(decoded.toJSON()).toEqual(expected);
+  });
+  it('refuses client-supplied userId', () => {
+    const frames: NT.ICompactPlayerFrames = {
+      xInit: 1.3,
+      xDeltas: [1, -1],
+      yInit: -1.3,
+      yDeltas: [1, -1],
+      animIdx: [1],
+      animVal: [1],
+      armR: [1],
+      armScaleY: 1,
+      scaleX: 1,
+      heldIdx: [1],
+      heldVal: [1],
+      userId: 'rejected',
+    };
+    const encoded = NT.Envelope.encode({ gameAction: { cPlayerMove: frames } }).finish();
+    const playerMovePayload = maybePlayerMove(Buffer.from(encoded));
+    expect(playerMovePayload).toBeDefined();
+
+    const pmId = Buffer.from('12345');
+    const tagged = tagPlayerMove(playerMovePayload!, pmId);
     expect(tagged).toBeUndefined();
   });
 });

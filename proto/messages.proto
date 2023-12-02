@@ -13,8 +13,8 @@ message GameAction {
         // The c prefix stands for "client", which refers to this application
         // The s prefix stands for "server", which refers to the online Noita game server
 
-        PlayerMove player_move = 1;
-        PlayerPosition player_position = 2;
+        CompactPlayerFrames c_player_move = 1;
+        ServerPlayerMoves s_player_moves = 2;
 
         ClientPlayerUpdate c_player_update = 3;
         ServerPlayerUpdate s_player_update = 4;
@@ -63,7 +63,7 @@ message GameAction {
 
         ClientPlayerSecretHourglass c_player_secret_hourglass = 33;
         ServerPlayerSecretHourglass s_player_secret_hourglass = 34;
-    
+
         ClientCustomModEvent c_custom_mod_event = 35;
         ServerCustomModEvent s_custom_mod_event = 36;
 
@@ -86,17 +86,32 @@ message PlayerFrame {
     optional int32 anim = 6;
     optional int32 held = 7;
 }
-
-message PlayerMove {
-    repeated PlayerFrame frames = 1;
-
-    optional string user_id = 15;
+message OldClientPlayerMove {
+    repeated PlayerFrame frames = 1; 
 }
 
-message PlayerPosition {
-    PlayerFrame frame = 1;
+message OldServerPlayerMove {
+    string user_id = 1;
+    repeated PlayerFrame frames = 2;
+}
+
+message CompactPlayerFrames {
+    float x_init = 1;
+    float y_init = 2;
+    repeated sint32 x_deltas = 3;
+    repeated sint32 y_deltas = 4;
+    repeated int32 arm_r = 5;
+    int32 armScaleY = 6;
+    int32 scaleX = 7;
+    repeated int32 anim_idx = 8;
+    repeated int32 anim_val = 9;
+    repeated int32 held_idx = 10;
+    repeated int32 held_val = 11;
 
     string user_id = 15;
+}
+message ServerPlayerMoves {
+    repeated CompactPlayerFrames user_frames = 1;
 }
 
 message ClientPlayerUpdate {

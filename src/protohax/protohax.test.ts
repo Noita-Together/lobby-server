@@ -1,11 +1,14 @@
 import { Enum, Message } from './fixtures/protohax_pb';
 import { ProtoHax } from './protohax';
+import Long from 'long';
+import fieldSpec from './fixtures/protohax_pb.json';
 
 describe('ProtoHax', () => {
   describe('single numeric values', () => {
-    type proto_scalar = number | bigint | boolean | Enum;
+    type proto_scalar = number | bigint | boolean | Enum | Long;
     type messageScalar = { [K in keyof Message as Message[K] extends proto_scalar | proto_scalar[] ? K : never]: K };
     type messageScalars = messageScalar[keyof messageScalar] & keyof Message;
+    type foo = { [K in keyof Message]: 1 } & unknown;
 
     type fakeBigint<T> = T extends bigint ? string : T extends bigint[] ? string[] : T;
 
@@ -47,23 +50,23 @@ describe('ProtoHax', () => {
       scalar('singleSfixed32',  -1            ),
       scalar('singleFloat',     asSingle(-1.1)),
       scalar('singleDouble',    -1.1          ),
-      scalar('singleInt64',    '-1'           ),
-      scalar('singleSint64',   '-1'           ),
-      scalar('singleSfixed64', '-1'           ),
+      scalar('singleInt64',    new Long(-1)   ),
+      scalar('singleSint64',   new Long(-1)   ),
+      scalar('singleSfixed64', new Long(-1)   ),
 
       // zero
-      scalar('singleInt32',     0 ),
-      scalar('singleUint32',    0 ),
-      scalar('singleSint32',    0 ),
-      scalar('singleFixed32',   0 ),
-      scalar('singleSfixed32',  0 ),
-      scalar('singleFloat',     0 ),
-      scalar('singleDouble',    0 ),
-      scalar('singleInt64',    '0'),
-      scalar('singleUint64',   '0'),
-      scalar('singleSint64',   '0'),
-      scalar('singleFixed64',  '0'),
-      scalar('singleSfixed64', '0'),
+      scalar('singleInt32',     0          ),
+      scalar('singleUint32',    0          ),
+      scalar('singleSint32',    0          ),
+      scalar('singleFixed32',   0          ),
+      scalar('singleSfixed32',  0          ),
+      scalar('singleFloat',     0          ),
+      scalar('singleDouble',    0          ),
+      scalar('singleInt64',     new Long(0)),
+      scalar('singleUint64',    new Long(0)),
+      scalar('singleSint64',    new Long(0)),
+      scalar('singleFixed64',   new Long(0)),
+      scalar('singleSfixed64',  new Long(0)),
 
       // one
       scalar('singleInt32',     1            ),
@@ -73,38 +76,38 @@ describe('ProtoHax', () => {
       scalar('singleSfixed32',  1            ),
       scalar('singleFloat',     asSingle(1.1)),
       scalar('singleDouble',    1.1          ),
-      scalar('singleInt64',    '1'           ),
-      scalar('singleUint64',   '1'           ),
-      scalar('singleSint64',   '1'           ),
-      scalar('singleFixed64',  '1'           ), 
-      scalar('singleSfixed64', '1'           ),
+      scalar('singleInt64',    new Long(1)   ),
+      scalar('singleUint64',   new Long(1)   ),
+      scalar('singleSint64',   new Long(1)   ),
+      scalar('singleFixed64',  new Long(1)   ),
+      scalar('singleSfixed64', new Long(1)   ),
 
       // varint edges
       scalar('singleInt32', 1<<30),
-      scalar('singleInt64', (0b01100110_10110010_10010111_01011001_10100110_11001001_10111010_00110011n).toString()),
+      scalar('singleInt64', Long.fromString((0b01100110_10110010_10010111_01011001_10100110_11001001_10111010_00110011n).toString())),
 
       // booleans
       scalar('singleBool', true),
       scalar('singleBool', false),
 
       // enums
-      scalar('singleEnum', Enum.UNSPECIFIED),
-      scalar('singleEnum', Enum.ONE),
-      scalar('singleEnum', Enum.TWO),
+      scalar('singleEnum', Enum.ENUM_UNSPECIFIED),
+      scalar('singleEnum', Enum.ENUM_ONE),
+      scalar('singleEnum', Enum.ENUM_TWO),
     ];
 
     it.each(tests)('$key $value', ({ key, value }) => {
       const n = typeof value === 'string' ? BigInt(value) : value;
-      const pbes_encoded = Buffer.from(
-        new Message({
+      const pbjs_encoded = Buffer.from(
+        Message.encode({
           [key]: n,
-        }).toBinary(),
+        }).finish(),
       );
 
-      const fieldId = Message.fields.findJsonName(key)?.no;
+      const fieldId = (fieldSpec.nested.Message.fields as any)[key]?.id;
       expect(fieldId).not.toBeUndefined();
 
-      const phax = new ProtoHax(pbes_encoded);
+      const phax = new ProtoHax(pbjs_encoded);
       const readMethod = methodNames[key];
       expect(readMethod).not.toBeUndefined();
 
@@ -116,21 +119,21 @@ describe('ProtoHax', () => {
   describe('packed repeated', () => {
     it('reads with .Packed()', () => {
       const expected = [1, 2, 3];
-      const pbes_encoded = Buffer.from(new Message({ repeatedInt32: expected }).toBinary());
+      const pbjs_encoded = Buffer.from(Message.encode({ repeatedInt32: expected }).finish());
 
-      const fieldId = Message.fields.findJsonName('repeatedInt32')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.repeatedInt32.id;
       expect(fieldId).not.toBeUndefined();
 
-      const phax = new ProtoHax(pbes_encoded);
+      const phax = new ProtoHax(pbjs_encoded);
 
       const actual = phax.with(fieldId!).Packed('Int32');
       expect(actual).toEqual(expected);
     });
     it('reads with value readers', () => {
       const expected = [1, 2, 3];
-      const pbes_encoded = Buffer.from(new Message({ repeatedInt32: expected }).toBinary());
+      const pbes_encoded = Buffer.from(Message.encode({ repeatedInt32: expected }).finish());
 
-      const fieldId = Message.fields.findJsonName('repeatedInt32')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.repeatedInt32.id;
       expect(fieldId).not.toBeUndefined();
 
       const phax = new ProtoHax(pbes_encoded);
@@ -148,9 +151,9 @@ describe('ProtoHax', () => {
   describe('length-delimited', () => {
     it('reads a string', () => {
       const expected = 'hi there ☃';
-      const pbes_encoded = Buffer.from(new Message({ singleString: expected }).toBinary());
+      const pbes_encoded = Buffer.from(Message.encode({ singleString: expected }).finish());
 
-      const fieldId = Message.fields.findJsonName('singleString')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.singleString.id;
       expect(fieldId).not.toBeUndefined();
 
       const phax = new ProtoHax(pbes_encoded);
@@ -161,9 +164,9 @@ describe('ProtoHax', () => {
     });
     it('reads bytes', () => {
       const expected = Buffer.from('hi there ☃');
-      const pbes_encoded = Buffer.from(new Message({ singleBytes: expected }).toBinary());
+      const pbes_encoded = Buffer.from(Message.encode({ singleBytes: expected }).finish());
 
-      const fieldId = Message.fields.findJsonName('singleBytes')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.singleBytes.id;
       expect(fieldId).not.toBeUndefined();
 
       const phax = new ProtoHax(pbes_encoded);
@@ -174,24 +177,24 @@ describe('ProtoHax', () => {
     });
     it('reads messages', () => {
       const pbes_encoded = Buffer.from(
-        new Message({
+        Message.encode({
           lMessage: {
             singleBool: true,
           },
-          repeatedMessage: [{ singleEnum: Enum.ONE }, { singleEnum: Enum.TWO }],
-        }).toBinary(),
+          repeatedMessage: [{ singleEnum: Enum.ENUM_ONE }, { singleEnum: Enum.ENUM_TWO }],
+        }).finish(),
       );
 
-      const lMessage = Message.fields.findJsonName('lMessage')?.no;
+      const lMessage = fieldSpec.nested.Message.fields.lMessage.id;
       expect(lMessage).not.toBeUndefined();
-      const singleBool = Message.fields.findJsonName('singleBool')?.no;
+      const singleBool = fieldSpec.nested.Message.fields.singleBool.id;
       expect(singleBool).not.toBeUndefined();
-      const repeatedMessage = Message.fields.findJsonName('repeatedMessage')?.no;
+      const repeatedMessage = fieldSpec.nested.Message.fields.repeatedMessage.id;
       expect(repeatedMessage).not.toBeUndefined();
-      const singleEnum = Message.fields.findJsonName('singleEnum')?.no;
+      const singleEnum = fieldSpec.nested.Message.fields.singleEnum.id;
       expect(singleEnum).not.toBeUndefined();
 
-      const expected = [true, Enum.ONE, Enum.TWO];
+      const expected = [true, Enum.ENUM_ONE, Enum.ENUM_TWO];
       const actual: [boolean, number, number] = [] as any;
 
       actual.push(
@@ -211,9 +214,9 @@ describe('ProtoHax', () => {
   describe('if', () => {
     it('finds the first value', () => {
       const expected = 1;
-      const pbes_encoded = Buffer.from(new Message({ singleInt32: expected }).toBinary());
+      const pbes_encoded = Buffer.from(Message.encode({ singleInt32: expected }).finish());
 
-      const fieldId = Message.fields.findJsonName('singleInt32')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.singleInt32.id;
       expect(fieldId).not.toBeUndefined();
 
       let found = false;
@@ -224,9 +227,9 @@ describe('ProtoHax', () => {
     });
     it('does nothing on no match', () => {
       const expected = 1;
-      const pbes_encoded = Buffer.from(new Message({ singleInt32: expected }).toBinary());
+      const pbes_encoded = Buffer.from(Message.encode({ singleInt32: expected }).finish());
 
-      const fieldId = Message.fields.findJsonName('singleBool')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.singleBool.id;
       expect(fieldId).not.toBeUndefined();
 
       let found = false;
@@ -240,9 +243,9 @@ describe('ProtoHax', () => {
       // with arbitrary / unrelated data in the last-read value property. this caused an exception
       // when the last-read value indicated a group wiretype ("not implemented").
       // TODO: this.seek could return a boolean directly indicating whether it terminates an operation
-      const pbes_encoded = Buffer.from(new Message({ singleString: 'hi there11' }).toBinary());
+      const pbes_encoded = Buffer.from(Message.encode({ singleString: 'hi there11' }).finish());
 
-      const fieldId = Message.fields.findJsonName('singleInt32')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.singleInt32.id;
       expect(fieldId).not.toBeUndefined();
 
       let found = false;
@@ -255,9 +258,9 @@ describe('ProtoHax', () => {
   describe('each', () => {
     it('reads scalars', () => {
       const expected = [1, 2, 3];
-      const pbes_encoded = Buffer.from(new Message({ unpackedInt32: expected }).toBinary());
+      const pbes_encoded = Buffer.from(Message.encode({ unpackedInt32: expected }).finish());
 
-      const fieldId = Message.fields.findJsonName('unpackedInt32')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.unpackedInt32.id;
       expect(fieldId).not.toBeUndefined();
 
       const phax = new ProtoHax(pbes_encoded);
@@ -268,9 +271,9 @@ describe('ProtoHax', () => {
     });
     it('reads strings', () => {
       const expected = ['a', 'b'];
-      const pbes_encoded = Buffer.from(new Message({ repeatedString: expected }).toBinary());
+      const pbes_encoded = Buffer.from(Message.encode({ repeatedString: expected }).finish());
 
-      const fieldId = Message.fields.findJsonName('repeatedString')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.repeatedString.id;
       expect(fieldId).not.toBeUndefined();
 
       const phax = new ProtoHax(pbes_encoded);
@@ -282,9 +285,9 @@ describe('ProtoHax', () => {
     });
     it('reads bytes', () => {
       const expected = ['a', 'b'].map((s) => Buffer.from(s));
-      const pbes_encoded = Buffer.from(new Message({ repeatedBytes: expected }).toBinary());
+      const pbes_encoded = Buffer.from(Message.encode({ repeatedBytes: expected }).finish());
 
-      const fieldId = Message.fields.findJsonName('repeatedBytes')?.no;
+      const fieldId = fieldSpec.nested.Message.fields.repeatedBytes.id;
       expect(fieldId).not.toBeUndefined();
 
       const phax = new ProtoHax(pbes_encoded);
@@ -298,8 +301,8 @@ describe('ProtoHax', () => {
   describe('skip', () => {
     it('can skip over everything', () => {
       const pbes_encoded = Buffer.from(
-        new Message({
-          lMessage: new Message({ singleDouble: 1 }),
+        Message.encode({
+          lMessage: Message.encode({ singleDouble: 1 }),
           singleInt32: 1,
           singleInt64: 1n,
           singleUint32: 1,
@@ -307,7 +310,7 @@ describe('ProtoHax', () => {
           singleSint32: 1,
           singleSint64: 1n,
           singleBool: true,
-          singleEnum: Enum.ONE,
+          singleEnum: Enum.ENUM_ONE,
           singleFixed64: 1n,
           singleSfixed64: 1n,
           singleDouble: 1,
@@ -316,13 +319,13 @@ describe('ProtoHax', () => {
           singleFixed32: 1,
           singleSfixed32: 1,
           singleFloat: 1,
-          singleMessage: new Message({ singleDouble: 1 }),
+          singleMessage: Message.encode({ singleDouble: 1 }),
           repeatedInt32: [1],
           repeatedString: ['hi'],
           repeatedBytes: [Buffer.from('hi')],
-          repeatedMessage: [new Message({ singleDouble: 1 })],
+          repeatedMessage: [Message.encode({ singleDouble: 1 })],
           unpackedInt32: [1],
-        }).toBinary(),
+        }).finish(),
       );
       const phax = new ProtoHax(pbes_encoded);
       phax.if(1337, (phax) => {
