@@ -5,8 +5,8 @@ import {
   UpdateRoomOpts,
   validateRoomOpts,
 } from '../runtypes/room_opts';
-import { Publishers, M, createChat } from '../util';
-import { tagPlayerMove } from '../protoutil';
+import { Publishers, createChat } from '../util';
+import { M, NT, tagPlayerMove } from 'nt-message';
 import { GameActionHandlers } from '../types';
 import { statsUrl } from '../env_vars';
 
@@ -17,7 +17,6 @@ import { StatsEvent, StatsRecorder } from './stats_recorder';
 import { v4 as uuidv4 } from 'uuid';
 
 import Debug from 'debug';
-import { NT } from '../gen/pbjs_pb';
 const debug = Debug('nt:room');
 
 let id = 0;

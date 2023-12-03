@@ -1,39 +1,12 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { TemplatedApp, WebSocket } from 'uWebSockets.js';
 import { v4 as uuidv4 } from 'uuid';
+import { M, NT } from 'nt-message';
 
 import { IUser } from './state/user';
 
-import { NT } from './gen/pbjs_pb';
-import { gameActions, lobbyActions } from './pbreflect';
-import { ActionCreator, GameActionCreators, LobbyActionCreators } from './types';
-
 import Debug from 'debug';
 const debug = Debug('nt:util');
-
-/**
- * Factory functions for each action type. Each function
- * accepts an action payload and returns an `NT.Envelope` instance
- *
- * @example
- * ```ts
- * M.cChat({ message: 'hi there' })
- * ```
- */
-export const M: GameActionCreators & LobbyActionCreators = {} as any;
-
-for (const key of gameActions) {
-  M[key] = ((data, encoded) =>
-    encoded
-      ? NT.Envelope.encode({ gameAction: { [key]: data } }).finish()
-      : NT.Envelope.fromObject({ gameAction: { [key]: data } })) as ActionCreator<NT.IGameAction[typeof key]>;
-}
-for (const key of lobbyActions) {
-  M[key] = ((data, encoded) =>
-    encoded
-      ? NT.Envelope.encode({ lobbyAction: { [key]: data } }).finish()
-      : NT.Envelope.fromObject({ lobbyAction: { [key]: data } })) as ActionCreator<NT.ILobbyAction[typeof key]>;
-}
 
 type HasPublish = Pick<WebSocket<unknown>, 'publish'>;
 

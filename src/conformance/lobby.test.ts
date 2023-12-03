@@ -1,10 +1,10 @@
-import { NT } from '../gen/pbjs_pb';
+import { RecognizedString } from 'uWebSockets.js';
+import { M, NT } from 'nt-message';
 import { createJwtFns } from '../jwt';
 import { AuthProvider, ClientAuth } from '../runtypes/client_auth';
 import { LobbyState, SYSTEM_USER } from '../state/lobby';
-import { BindPublishers, M } from '../util';
+import { BindPublishers } from '../util';
 import { ClientAuthWebSocket, TaggedClientAuth, createMessageHandler } from '../ws_handlers';
-import { RecognizedString } from 'uWebSockets.js';
 
 type sentMessage = {
   topic: string | null;

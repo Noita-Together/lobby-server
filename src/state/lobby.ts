@@ -1,6 +1,6 @@
-import { NT } from '../gen/pbjs_pb';
+import { M, NT } from 'nt-message';
 import { ClientAuthWebSocket } from '../ws_handlers';
-import { Publishers, M } from '../util';
+import { Publishers } from '../util';
 import { LobbyActionHandlers } from '../types';
 
 import { IUser, UserState } from './user';

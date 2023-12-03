@@ -1,5 +1,5 @@
 import { Message } from 'protobufjs';
-import { NT } from './gen/pbjs_pb';
+import { NT } from 'nt-message';
 import type { UserState } from './state/user';
 
 export interface ActionCreator<T> {

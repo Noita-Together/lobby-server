@@ -1,5 +1,4 @@
-import { M } from '../util';
-import { NT } from '../gen/pbjs_pb';
+import { M, NT } from 'nt-message';
 
 import { RoomState } from './room';
 import { LobbyState } from './lobby';

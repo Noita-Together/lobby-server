@@ -6,9 +6,8 @@ import { LobbyState } from './state/lobby';
 import { UserState } from './state/user';
 import { RoomState } from './state/room';
 
-import { maybePlayerMove } from './protoutil';
+import { NT, maybePlayerMove } from 'nt-message';
 import { shortHash } from './util';
-import { NT } from './gen/pbjs_pb';
 
 import type Debug from 'debug';
 
