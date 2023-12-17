@@ -1,4 +1,4 @@
-import { M, NT } from 'nt-message';
+import { M, NT } from '@noita-together/nt-message';
 
 import { RoomState } from './room';
 import { LobbyState } from './lobby';

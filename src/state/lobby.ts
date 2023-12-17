@@ -1,4 +1,4 @@
-import { M, NT } from 'nt-message';
+import { M, NT } from '@noita-together/nt-message';
 import { ClientAuthWebSocket } from '../ws_handlers';
 import { Publishers } from '../util';
 import { LobbyActionHandlers } from '../types';

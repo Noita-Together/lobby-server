@@ -1,5 +1,5 @@
 import { RecognizedString } from 'uWebSockets.js';
-import { M, NT } from 'nt-message';
+import { M, NT } from '@noita-together/nt-message';
 import { createJwtFns } from '../jwt';
 import { AuthProvider, ClientAuth } from '../runtypes/client_auth';
 import { LobbyState, SYSTEM_USER } from '../state/lobby';

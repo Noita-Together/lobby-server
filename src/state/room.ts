@@ -6,7 +6,7 @@ import {
   validateRoomOpts,
 } from '../runtypes/room_opts';
 import { Publishers, createChat } from '../util';
-import { M, NT, tagPlayerMove } from 'nt-message';
+import { M, NT, tagPlayerMove } from '@noita-together/nt-message';
 import { GameActionHandlers } from '../types';
 import { statsUrl } from '../env_vars';
 

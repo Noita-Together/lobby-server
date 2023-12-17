@@ -10,7 +10,7 @@ import {
   decodeStable,
   encodeBitfield,
   encodeStable,
-} from 'nt-message';
+} from '@noita-together/nt-message';
 
 const infile = PATH.resolve(__dirname, '../ndjson');
 

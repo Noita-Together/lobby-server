@@ -1,7 +1,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { TemplatedApp, WebSocket } from 'uWebSockets.js';
 import { v4 as uuidv4 } from 'uuid';
-import { M, NT } from 'nt-message';
+import { M, NT } from '@noita-together/nt-message';
 
 import { IUser } from './state/user';
 

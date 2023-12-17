@@ -6,7 +6,7 @@ import { LobbyState } from './state/lobby';
 import { UserState } from './state/user';
 import { RoomState } from './state/room';
 
-import { NT, maybePlayerMove } from 'nt-message';
+import { NT, maybePlayerMove } from '@noita-together/nt-message';
 import { shortHash } from './util';
 
 import type Debug from 'debug';

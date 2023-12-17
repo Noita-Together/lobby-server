@@ -1,5 +1,5 @@
 import { Message } from 'protobufjs';
-import { NT } from 'nt-message';
+import { NT } from '@noita-together/nt-message';
 import type { UserState } from './state/user';
 
 export interface ActionCreator<T> {
