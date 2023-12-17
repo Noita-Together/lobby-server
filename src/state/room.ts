@@ -565,9 +565,10 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
       // to be receiving the message.
       user.parted(this);
     }
-    this.users.clear();
 
     this.lobby.roomDestroyed(this);
+    this.users.clear();
+
     debug(this.id, 'destroyed');
   }
 

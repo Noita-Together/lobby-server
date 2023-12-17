@@ -179,6 +179,11 @@ export class LobbyState implements LobbyActionHandlers {
    * @param room RoomState instance of the room that was destroyed
    */
   roomDestroyed(room: RoomState) {
+    for (const user of room.getUsers()) {
+      if (!user.isConnected()) {
+        this.users.delete(user.id);
+      }
+    }
     this.rooms.delete(room.id);
   }
 

@@ -208,14 +208,23 @@ describe('lobby conformance tests', () => {
 
   describe('disconnect handling', () => {
     it('cleans up a room when all active users have disconnected', () => {
-      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages, expectGameAction, expectLobbyAction } =
-        createTestEnv(false);
-      const user = testSocket('id', 'name');
+      const {
+        testSocket,
+        handleOpen,
+        handleMessage,
+        handleClose,
+        sentMessages,
+        lobby,
+        expectGameAction,
+        expectLobbyAction,
+      } = createTestEnv(false);
+      const host = testSocket('id', 'host');
+      const player = testSocket('id2', 'player');
 
-      handleOpen(user);
+      handleOpen(host);
 
       // create a room - should have a uuid for its id
-      handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
+      handleMessage(host, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "host's room" }, true), true);
 
       const sRoomCreated = expectLobbyAction('sRoomCreated');
       expect(sRoomCreated.id).toMatch(uuidRE);
@@ -223,12 +232,31 @@ describe('lobby conformance tests', () => {
       expectLobbyAction('sRoomAddToList');
       expect(sentMessages).toEqual([]);
 
-      handleClose(user, 1006, Buffer.from('test'));
+      handleOpen(player);
+      handleMessage(player, M.cJoinRoom({ id: sRoomCreated.id }, true), true);
+
+      expectLobbyAction('sUserJoinedRoom');
+      expectGameAction('sChat');
+      expectLobbyAction('sJoinRoomSuccess');
+      expectLobbyAction('sRoomFlagsUpdated');
+      expectLobbyAction('sUserReadyState');
+
+      // start the game so that the UserState is retained in the RoomState
+      handleMessage(host, M.cStartRun({}, true), true);
+      expectLobbyAction('sHostStart');
+
+      handleClose(player, 1006, Buffer.from('test'));
+      expectLobbyAction('sUserLeftRoom'); // synthetic "leave" message for disconnected user
+      expectGameAction('sChat'); // chat message saying user disconnected
+
+      handleClose(host, 1006, Buffer.from('test'));
 
       const sRoomDeleted = expectLobbyAction('sRoomDeleted');
       expect(sRoomDeleted.id).toMatch(uuidRE);
 
       expect(sentMessages).toEqual([]);
+      // ensure the lobby cleans up references to ghost users who were still present in the room
+      expect(lobby.getInfo().users).toEqual(0);
     });
 
     it('leaves a room active when at least one connected user is present', () => {
@@ -238,7 +266,6 @@ describe('lobby conformance tests', () => {
       const user2 = testSocket('id2', 'name2');
 
       handleOpen(user);
-      handleOpen(user2);
 
       // create a room - should have a uuid for its id
       handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
@@ -250,6 +277,7 @@ describe('lobby conformance tests', () => {
       expectLobbyAction('sRoomAddToList');
       expect(sentMessages).toEqual([]);
 
+      handleOpen(user2);
       handleMessage(user2, M.cJoinRoom({ id: roomId }, true), true);
 
       expectLobbyAction('sUserJoinedRoom');
