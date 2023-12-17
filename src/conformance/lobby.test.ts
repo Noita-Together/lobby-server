@@ -253,6 +253,7 @@ describe('lobby conformance tests', () => {
       handleMessage(user2, M.cJoinRoom({ id: roomId }, true), true);
 
       expectLobbyAction('sUserJoinedRoom');
+      expectGameAction('sChat');
       expectLobbyAction('sJoinRoomSuccess');
       expectLobbyAction('sRoomFlagsUpdated');
       expectLobbyAction('sUserReadyState');
@@ -264,17 +265,9 @@ describe('lobby conformance tests', () => {
       expect(sentMessages).toEqual([]);
     });
 
-    it('allows disconnected users to rejoin locked rooms. owner retains ownership', () => {
-      const {
-        testSocket,
-        handleOpen,
-        handleMessage,
-        handleClose,
-        sentMessages,
-        lobby,
-        expectGameAction,
-        expectLobbyAction,
-      } = createTestEnv(false);
+    it('allows disconnected users to rejoin locked, in-progress rooms. owner retains ownership', () => {
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages, expectGameAction, expectLobbyAction } =
+        createTestEnv(false);
       const owner = testSocket('ownerid', 'owner');
       const player = testSocket('playerid', 'player');
 
@@ -288,12 +281,67 @@ describe('lobby conformance tests', () => {
       expect(sRoomCreated.id).toMatch(uuidRE);
       const roomId = sRoomCreated.id!;
 
-      const sRoomAddToList = expectLobbyAction('sRoomAddToList');
+      expectLobbyAction('sRoomAddToList');
       expect(sentMessages).toEqual([]);
 
       handleMessage(player, M.cJoinRoom({ id: roomId }, true), true);
 
       expectLobbyAction('sUserJoinedRoom');
+      expectGameAction('sChat');
+      expectLobbyAction('sJoinRoomSuccess');
+      expectLobbyAction('sRoomFlagsUpdated');
+      expectLobbyAction('sUserReadyState');
+      expect(sentMessages).toEqual([]);
+
+      handleMessage(owner, M.cRoomUpdate({ locked: true }, true), true);
+      expectLobbyAction('sRoomUpdated');
+      expect(sentMessages).toEqual([]);
+
+      handleMessage(owner, M.cStartRun({}, true), true);
+      expectLobbyAction('sHostStart');
+
+      handleClose(player, 1006, Buffer.from('test'));
+      expectLobbyAction('sUserLeftRoom');
+      const chat1 = expectGameAction('sChat');
+      expect(chat1.message).toMatch(/disconnected/);
+
+      // player can rejoin
+      const player2 = testSocket('playerid', 'player');
+      handleOpen(player2);
+      handleMessage(player2, M.cJoinRoom({ id: roomId }, true), true);
+
+      expectLobbyAction('sUserJoinedRoom');
+      const chat2 = expectGameAction('sChat');
+      expect(chat2.message).toMatch(/rejoined/);
+      expectLobbyAction('sJoinRoomSuccess');
+      expectLobbyAction('sRoomFlagsUpdated');
+      expectLobbyAction('sUserReadyState');
+      expect(sentMessages).toEqual([]);
+    });
+
+    it('disallows disconnected users from rejoining locked, NOT in-progress rooms', () => {
+      const { testSocket, handleOpen, handleMessage, handleClose, sentMessages, expectGameAction, expectLobbyAction } =
+        createTestEnv(false);
+      const owner = testSocket('ownerid', 'owner');
+      const player = testSocket('playerid', 'player');
+
+      handleOpen(owner);
+      handleOpen(player);
+
+      // create a room - should have a uuid for its id
+      handleMessage(owner, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
+
+      const sRoomCreated = expectLobbyAction('sRoomCreated');
+      expect(sRoomCreated.id).toMatch(uuidRE);
+      const roomId = sRoomCreated.id!;
+
+      expectLobbyAction('sRoomAddToList');
+      expect(sentMessages).toEqual([]);
+
+      handleMessage(player, M.cJoinRoom({ id: roomId }, true), true);
+
+      expectLobbyAction('sUserJoinedRoom');
+      expectGameAction('sChat');
       expectLobbyAction('sJoinRoomSuccess');
       expectLobbyAction('sRoomFlagsUpdated');
       expectLobbyAction('sUserReadyState');
@@ -304,15 +352,16 @@ describe('lobby conformance tests', () => {
       expect(sentMessages).toEqual([]);
 
       handleClose(player, 1006, Buffer.from('test'));
+      expectLobbyAction('sUserLeftRoom');
+      const chat1 = expectGameAction('sChat');
+      expect(chat1.message).toMatch(/disconnected/);
 
       // player can rejoin
       const player2 = testSocket('playerid', 'player');
       handleOpen(player2);
       handleMessage(player2, M.cJoinRoom({ id: roomId }, true), true);
 
-      expectLobbyAction('sJoinRoomSuccess');
-      expectLobbyAction('sRoomFlagsUpdated');
-      expectLobbyAction('sUserReadyState');
+      expectLobbyAction('sJoinRoomFailed');
       expect(sentMessages).toEqual([]);
     });
   });
@@ -532,6 +581,16 @@ describe('lobby conformance tests', () => {
           }),
         ),
         sm(
+          '/room/room1',
+          users.user2,
+          M.sChat({
+            id: 'chat1',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'user2 joined the room.',
+          }),
+        ),
+        sm(
           null,
           users.user2,
           M.sJoinRoomSuccess({
@@ -642,6 +701,16 @@ describe('lobby conformance tests', () => {
             M.sUserJoinedRoom({
               userId: '2',
               name: 'user2',
+            }),
+          ),
+          sm(
+            '/room/room1',
+            user2,
+            M.sChat({
+              id: 'chat1',
+              userId: SYSTEM_USER.id,
+              name: SYSTEM_USER.name,
+              message: 'user2 joined the room.',
             }),
           ),
           sm(
@@ -1176,7 +1245,7 @@ describe('lobby conformance tests', () => {
           '/room/room1',
           null,
           M.sChat({
-            id: 'chat1',
+            id: 'chat2',
             userId: SYSTEM_USER.id,
             name: SYSTEM_USER.name,
             message: 'user2 has been banned from this room.',
@@ -1249,7 +1318,7 @@ describe('lobby conformance tests', () => {
           '/room/room1',
           null,
           M.sChat({
-            id: 'chat1',
+            id: 'chat2',
             userId: SYSTEM_USER.id,
             name: SYSTEM_USER.name,
             message: 'user2 has been kicked from this room.',
@@ -1261,6 +1330,17 @@ describe('lobby conformance tests', () => {
           M.sUserJoinedRoom({
             userId: '2',
             name: 'user2',
+          }),
+        ),
+
+        sm(
+          '/room/room1',
+          users.user2,
+          M.sChat({
+            id: 'chat3',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'user2 joined the room.',
           }),
         ),
         sm(
@@ -1340,7 +1420,7 @@ describe('lobby conformance tests', () => {
 
     // name: 'cJoinRoom - success (twice)',
     tests.push({
-      name: 'cRoomUpdate - success (twice)',
+      name: 'cJoinRoom - success (twice)',
       clientMessages: (users) => [
         ...u1create_u2join_no_password.clientMessages(users),
         [
@@ -1352,6 +1432,24 @@ describe('lobby conformance tests', () => {
       ],
       serverMessages: (users) => [
         ...u1create_u2join_no_password.serverMessages(users),
+        sm(
+          '/room/1',
+          users.user2,
+          M.sUserJoinedRoom({
+            userId: '2',
+            name: 'user2',
+          }),
+        ),
+        sm(
+          '/room/room1',
+          users.user2,
+          M.sChat({
+            id: 'chat2',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'user2 rejoined the room.',
+          }),
+        ),
         sm(
           null,
           users.user2,
@@ -1471,6 +1569,16 @@ describe('lobby conformance tests', () => {
           }),
         ),
         sm(
+          '/room/room1',
+          users.user2,
+          M.sChat({
+            id: 'chat1',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'user2 joined the room.',
+          }),
+        ),
+        sm(
           null,
           users.user2,
           M.sJoinRoomSuccess({
@@ -1584,7 +1692,7 @@ describe('lobby conformance tests', () => {
           '/room/room1',
           null,
           M.sChat({
-            id: 'chat1',
+            id: 'chat2',
             userId: SYSTEM_USER.id,
             name: SYSTEM_USER.name,
             message: 'user2 has left.',
@@ -1596,6 +1704,16 @@ describe('lobby conformance tests', () => {
           M.sUserJoinedRoom({
             userId: '2',
             name: 'user2',
+          }),
+        ),
+        sm(
+          '/room/room1',
+          users.user2,
+          M.sChat({
+            id: 'chat3',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'user2 joined the room.',
           }),
         ),
         sm(
@@ -1657,7 +1775,7 @@ describe('lobby conformance tests', () => {
           '/room/room1',
           null,
           M.sChat({
-            id: 'chat1',
+            id: 'chat2',
             userId: SYSTEM_USER.id,
             name: SYSTEM_USER.name,
             message: 'user2 has left.',
@@ -2141,6 +2259,16 @@ describe('lobby conformance tests', () => {
           }),
         ),
         sm(
+          '/room/room1',
+          users.user2,
+          M.sChat({
+            id: 'chat1',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'user2 joined the room.',
+          }),
+        ),
+        sm(
           null,
           users.user2,
           M.sJoinRoomSuccess({
@@ -2245,6 +2373,16 @@ describe('lobby conformance tests', () => {
           M.sUserJoinedRoom({
             userId: '42069',
             name: 'myndzi',
+          }),
+        ),
+        sm(
+          '/room/room1',
+          users.myndzi,
+          M.sChat({
+            id: 'chat2',
+            userId: SYSTEM_USER.id,
+            name: SYSTEM_USER.name,
+            message: 'myndzi joined the room.',
           }),
         ),
         sm(
@@ -2429,7 +2567,7 @@ describe('lobby conformance tests', () => {
           '/room/room1',
           null,
           M.sChat({
-            id: 'chat1',
+            id: 'chat3',
             userId: SYSTEM_USER.id,
             name: SYSTEM_USER.name,
             message: `Stats for run can be found at https://noitatogether.com/api/stats/room1/stats1/html`,
@@ -2488,7 +2626,7 @@ describe('lobby conformance tests', () => {
           '/room/room1',
           null,
           M.sChat({
-            id: 'chat1',
+            id: 'chat3',
             userId: SYSTEM_USER.id,
             name: SYSTEM_USER.name,
             message: `Stats for run can be found at https://noitatogether.com/api/stats/room1/stats1/html`,

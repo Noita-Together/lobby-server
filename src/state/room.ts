@@ -394,7 +394,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
    */
   join(user: UserState, password?: string | null): void {
     let reason: string | null = null;
-    let joinMessage = 'joining';
+    let joinMessage = 'joined the room.';
     const room = user.room();
 
     if (!room) {
@@ -408,7 +408,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
       // room. delete the old room if user is the owner, otherwise just leave
       room.delete(user) || room.part(user);
     } else {
-      joinMessage = 'rejoining';
+      joinMessage = 'rejoined the room.';
       // user (probably) got disconnected while in a room, and is rejoining it. allow them in
       // the NT app currently provides no way to join a room without leaving the
       // current room, but could in the future. if so, this assumption changes
@@ -422,18 +422,17 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
     debug(this.id, joinMessage, user.id, user.name);
     this.users.add(user);
 
-    // don't re-broadcast reconnect rejoins
-    if (room !== this) {
-      // broadcast the join to everyone except the user that joined
-      // that user will receive a different confirmation in `user.joined`
-      user.broadcast(
-        this.topic,
-        M.sUserJoinedRoom({
-          userId: user.id,
-          name: user.name,
-        }),
-      );
-    }
+    // broadcast the join to everyone except the user that joined
+    // that user will receive a different confirmation in `user.joined`
+    user.broadcast(
+      this.topic,
+      M.sUserJoinedRoom({
+        userId: user.id,
+        name: user.name,
+      }),
+    );
+    this.broadcast(this.chat(SYSTEM_USER, `${user.name} ${joinMessage}`));
+
     user.joined(this);
 
     // this.playerPositions.updatePlayers(this.users);
@@ -500,6 +499,21 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
    */
   part(actor: UserState) {
     this.removeUser(null, actor, M.sUserLeftRoom, 'has left.');
+  }
+
+  disconnected(actor: UserState) {
+    if (this.inProgress) {
+      // if user disconnected while game is in progress, leave them in the list of
+      // users so that they can reconnect.
+
+      // send a "user left room" message to the lobby to update the NT app's UI
+      this.broadcast(M.sUserLeftRoom({ userId: actor.id }));
+      // send a message explaining what happened
+      this.broadcast(this.chat(SYSTEM_USER, `${actor.name} disconnected.`));
+    } else {
+      // if user disconnected while game is NOT in progress, just remove them
+      this.removeUser(null, actor, M.sUserLeftRoom, 'disconnected.');
+    }
   }
 
   /**

@@ -182,11 +182,15 @@ export class UserState implements IUser {
     debug(this.id, this.name, 'disconnected');
     this.socket = null;
 
-    if (this.currentRoom !== null && this.currentRoom.owner === this) {
+    if (this.currentRoom === null) return;
+
+    if (this.currentRoom.owner === this) {
       // currently, the room host holds the state for the game. if they get disconnected,
       // that state is lost and the game is unrecoverable. make this more explicit by
       // directly destroying the room if the host gets disconnected.
       this.currentRoom.destroy();
+    } else {
+      this.currentRoom.disconnected(this);
     }
   }
 
