@@ -3,3 +3,6 @@
 /coverage
 /.env
 /.vscode/launch.json
+/src/gen
+ndjson
+playermove.ndjson

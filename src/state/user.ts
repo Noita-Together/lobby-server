@@ -1,5 +1,4 @@
-import * as NT from '../gen/messages_pb';
-import { M } from '../util';
+import { M, NT } from '@noita-together/nt-message';
 
 import { RoomState } from './room';
 import { LobbyState } from './lobby';
@@ -111,7 +110,7 @@ export class UserState implements IUser {
    * @param message The Envelope, or encoded Envelope, to send
    */
   send(message: Uint8Array | NT.Envelope) {
-    this.socket?.send(message instanceof Uint8Array ? message : message.toBinary(), true, false);
+    this.socket?.send(message instanceof Uint8Array ? message : NT.Envelope.encode(message).finish(), true, false);
   }
 
   /**
@@ -121,7 +120,12 @@ export class UserState implements IUser {
    * @param message The Envelope, or encoded Envelope, to send
    */
   broadcast(topic: string, message: Uint8Array | NT.Envelope) {
-    this.socket?.publish(topic, message instanceof Uint8Array ? message : message.toBinary(), true, false);
+    this.socket?.publish(
+      topic,
+      message instanceof Uint8Array ? message : NT.Envelope.encode(message).finish(),
+      true,
+      false,
+    );
   }
 
   /**
@@ -178,11 +182,15 @@ export class UserState implements IUser {
     debug(this.id, this.name, 'disconnected');
     this.socket = null;
 
-    if (this.currentRoom !== null && this.currentRoom.owner === this) {
+    if (this.currentRoom === null) return;
+
+    if (this.currentRoom.owner === this) {
       // currently, the room host holds the state for the game. if they get disconnected,
       // that state is lost and the game is unrecoverable. make this more explicit by
       // directly destroying the room if the host gets disconnected.
       this.currentRoom.destroy();
+    } else {
+      this.currentRoom.disconnected(this);
     }
   }
 

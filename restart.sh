@@ -9,7 +9,8 @@ source "$HERE/.env"
 CONTAINER_NAME="lobby-server"
 IMAGE_NAME="lobby-server"
 TLS_SERVER_NAME="lobby.noitatogether.com"
-ANCHOR_IP="$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/anchor_ipv4/address)"
+# ANCHOR_IP="$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/anchor_ipv4/address)"
+ANCHOR_IP="127.0.0.1"
 
 docker stop "$CONTAINER_NAME" || true
 docker rm "$CONTAINER_NAME" || true
@@ -18,9 +19,9 @@ docker run -d --name "$CONTAINER_NAME" \
   --restart "unless-stopped" \
   --network "nt" \
   --network-alias "$TLS_SERVER_NAME" \
-  -v "/etc/letsencrypt/archive/$TLS_SERVER_NAME:/etc/letsencrypt/archive/$TLS_SERVER_NAME" \
-  -v "/etc/letsencrypt/live/$TLS_SERVER_NAME:/etc/letsencrypt/live/$TLS_SERVER_NAME" \
-  -p "$ANCHOR_IP:443:443" \
+  -v "$HERE/tls:/etc/letsencrypt/archive/$TLS_SERVER_NAME" \
+  -v "$HERE/tls:/etc/letsencrypt/live/$TLS_SERVER_NAME" \
+  -p "$ANCHOR_IP:4443:443" \
   -e "DEBUG=*" \
   -e "JWT_SECRET=$SECRET_JWT_ACCESS" \
   -e "JWT_REFRESH=$SECRET_JWT_REFRESH" \

@@ -1,4 +1,3 @@
-import * as NT from '../gen/messages_pb';
 import {
   CreateBigRoomOpts,
   CreateRoomOpts,
@@ -6,9 +5,9 @@ import {
   UpdateRoomOpts,
   validateRoomOpts,
 } from '../runtypes/room_opts';
-import { Publishers, M, createChat } from '../util';
-import { tagPlayerMove } from '../protoutil';
-import { GameActions, Handlers } from '../types';
+import { Publishers, createChat } from '../util';
+import { M, NT, tagPlayerMove } from '@noita-together/nt-message';
+import { GameActionHandlers } from '../types';
 import { statsUrl } from '../env_vars';
 
 import { IUser, UserState } from './user';
@@ -44,14 +43,14 @@ export type RoomUpdate = {
   users: RoomUserUpdate[];
 };
 
-type RoomStateCreateOpts = CreateRoomOpts | CreateBigRoomOpts;
-type RoomStateUpdateOpts = UpdateRoomOpts | UpdateBigRoomOpts;
+export type RoomStateCreateOpts = CreateRoomOpts | CreateBigRoomOpts;
+export type RoomStateUpdateOpts = UpdateRoomOpts | UpdateBigRoomOpts;
 
 /**
  * Represents the state of a room in an NT lobby
  */
-export class RoomState implements Handlers<GameActions> {
-  private static readonly emptyFlags = M.sRoomFlagsUpdated().toBinary();
+export class RoomState implements GameActionHandlers<'cPlayerMove'> {
+  private static readonly emptyFlags = M.sRoomFlagsUpdated({}, true);
 
   private readonly lobby: LobbyState;
   private readonly broadcast: ReturnType<Publishers['broadcast']>;
@@ -255,7 +254,7 @@ export class RoomState implements Handlers<GameActions> {
     }
 
     if (_opts.name !== undefined) this.name = _opts.name;
-    if (_opts.password !== undefined) this.password = _opts.password;
+    if (_opts.password != undefined) this.password = _opts.password;
     if (_opts.gamemode !== undefined) this.gamemode = _opts.gamemode;
     if (_opts.maxUsers !== undefined) this.maxUsers = _opts.maxUsers;
     if (_opts.locked !== undefined) this.locked = _opts.locked;
@@ -277,7 +276,7 @@ export class RoomState implements Handlers<GameActions> {
 
     debug(this.id, 'updating flags', payload.flags.map(this.DEBUG_ONLY_flagValue));
 
-    const flags = M.sRoomFlagsUpdated(payload).toBinary();
+    const flags = M.sRoomFlagsUpdated(payload, true);
 
     // store the last-known flags as an already-encoded buffer, since we'll be
     // replaying it to people who join
@@ -393,9 +392,9 @@ export class RoomState implements Handlers<GameActions> {
    * @param user UserState instance of the joining user
    * @param password Supplied password, if any, that the user gave when attempting to join
    */
-  join(user: UserState, password?: string): void {
+  join(user: UserState, password?: string | null): void {
     let reason: string | null = null;
-    let joinMessage = 'joining';
+    let joinMessage = 'joined the room.';
     const room = user.room();
 
     if (!room) {
@@ -409,7 +408,7 @@ export class RoomState implements Handlers<GameActions> {
       // room. delete the old room if user is the owner, otherwise just leave
       room.delete(user) || room.part(user);
     } else {
-      joinMessage = 'rejoining';
+      joinMessage = 'rejoined the room.';
       // user (probably) got disconnected while in a room, and is rejoining it. allow them in
       // the NT app currently provides no way to join a room without leaving the
       // current room, but could in the future. if so, this assumption changes
@@ -423,18 +422,17 @@ export class RoomState implements Handlers<GameActions> {
     debug(this.id, joinMessage, user.id, user.name);
     this.users.add(user);
 
-    // don't re-broadcast reconnect rejoins
-    if (room !== this) {
-      // broadcast the join to everyone except the user that joined
-      // that user will receive a different confirmation in `user.joined`
-      user.broadcast(
-        this.topic,
-        M.sUserJoinedRoom({
-          userId: user.id,
-          name: user.name,
-        }),
-      );
-    }
+    // broadcast the join to everyone except the user that joined
+    // that user will receive a different confirmation in `user.joined`
+    user.broadcast(
+      this.topic,
+      M.sUserJoinedRoom({
+        userId: user.id,
+        name: user.name,
+      }),
+    );
+    this.broadcast(this.chat(SYSTEM_USER, `${user.name} ${joinMessage}`));
+
     user.joined(this);
 
     // this.playerPositions.updatePlayers(this.users);
@@ -503,6 +501,21 @@ export class RoomState implements Handlers<GameActions> {
     this.removeUser(null, actor, M.sUserLeftRoom, 'has left.');
   }
 
+  disconnected(actor: UserState) {
+    if (this.inProgress) {
+      // if user disconnected while game is in progress, leave them in the list of
+      // users so that they can reconnect.
+
+      // send a "user left room" message to the lobby to update the NT app's UI
+      this.broadcast(M.sUserLeftRoom({ userId: actor.id }));
+      // send a message explaining what happened
+      this.broadcast(this.chat(SYSTEM_USER, `${actor.name} disconnected.`));
+    } else {
+      // if user disconnected while game is NOT in progress, just remove them
+      this.removeUser(null, actor, M.sUserLeftRoom, 'disconnected.');
+    }
+  }
+
   /**
    * Remove a user from this room. They may rejoin.
    *
@@ -552,18 +565,19 @@ export class RoomState implements Handlers<GameActions> {
       // to be receiving the message.
       user.parted(this);
     }
-    this.users.clear();
 
     this.lobby.roomDestroyed(this);
+    this.users.clear();
+
     debug(this.id, 'destroyed');
   }
 
   //// message handlers ////
 
-  playerMoveRaw(payload: Buffer, user: UserState) {
+  cPlayerMove(cpf: Buffer, user: UserState) {
     if (!this.inProgress) return;
 
-    const bigUpdate = tagPlayerMove(payload, user.playerIdBuf);
+    const bigUpdate = tagPlayerMove(cpf, user.playerIdBuf);
     if (!bigUpdate) return;
 
     user.broadcast(this.topic, new Uint8Array(bigUpdate));
@@ -628,12 +642,15 @@ export class RoomState implements Handlers<GameActions> {
     // { ignoreSelf: true }
     user.broadcast(this.topic, M.sPlayerPickup({ userId: user.id, ...payload }));
 
-    switch (payload.kind.case) {
+    switch (payload.kind) {
       case 'heart':
         this.stats?.increment(user, StatsEvent.HeartPickup);
         break;
       case 'orb':
         this.stats?.increment(user, StatsEvent.OrbPickup);
+        break;
+      default:
+        debug('unknown oneof case in cPlayerPickup: ', payload.kind);
         break;
     }
   }
@@ -717,7 +734,7 @@ export class RoomState implements Handlers<GameActions> {
   private static readonly sym_unknown: unique symbol = Symbol('unknown');
 
   /*istanbul ignore next*/
-  private DEBUG_ONLY_flagValue = (flag: NT.ClientRoomFlagsUpdate_GameFlag) => {
+  private DEBUG_ONLY_flagValue = (flag: NT.ClientRoomFlagsUpdate.IGameFlag) => {
     // TODO: the NT app weirdly/incorrectly uses _optionality_ of flag message fields to signal
     // whether they are enabled or disabled. improving this requires a change to the app itself.
     // since we are unable to determine the expected type of a flag, we must currently rely on
