@@ -1,10 +1,10 @@
-import * as NT from '../gen/messages_pb';
-import { Handlers, LobbyActions } from '../types';
+import { M, NT } from '@noita-together/nt-message';
 import { ClientAuthWebSocket } from '../ws_handlers';
-import { Publishers, M } from '../util';
+import { Publishers } from '../util';
+import { LobbyActionHandlers } from '../types';
 
 import { IUser, UserState } from './user';
-import { RoomState } from './room';
+import { RoomState, RoomStateUpdateOpts } from './room';
 
 export const SYSTEM_USER: IUser = { id: '-1', name: '[SYSTEM]' };
 export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]' };
@@ -19,7 +19,7 @@ type createRoomParams = Simplify<Omit<Parameters<typeof RoomState.create>[0], 'r
  * Represents the state of an NT lobby. Currently there is exactly one lobby per
  * running instance.
  */
-export class LobbyState implements Handlers<LobbyActions> {
+export class LobbyState implements LobbyActionHandlers {
   private readonly publishers: Publishers;
   readonly broadcast: ReturnType<Publishers['broadcast']>;
 
@@ -179,6 +179,11 @@ export class LobbyState implements Handlers<LobbyActions> {
    * @param room RoomState instance of the room that was destroyed
    */
   roomDestroyed(room: RoomState) {
+    for (const user of room.getUsers()) {
+      if (!user.isConnected()) {
+        this.users.delete(user.id);
+      }
+    }
     this.rooms.delete(room.id);
   }
 
@@ -213,12 +218,14 @@ export class LobbyState implements Handlers<LobbyActions> {
   //// message handlers ////
 
   cRoomCreate(payload: NT.ClientRoomCreate, user: UserState) {
+    const { password, ...opts } = payload;
     const room = this.createRoom({
       lobby: this,
       owner: user,
       opts: {
         locked: false,
-        ...payload,
+        password: password ?? undefined,
+        ...opts,
       },
       publishers: this.publishers,
       devMode: this.devMode,
@@ -238,7 +245,12 @@ export class LobbyState implements Handlers<LobbyActions> {
   }
 
   cRoomUpdate(payload: NT.ClientRoomUpdate, user: UserState) {
-    const reason = user.room()?.update(user, payload);
+    // TODO: HAX: this is a workaround for protobuf.js generating weird oneof-shaped things with
+    // string|undefined|null values when using proto3 optionals instead of plain optional properties.
+    // connecting these to TypeBox is painful, so we're just yoloing it. we can improve by dropping
+    // the use of proto3 optional or making the runtypes more thoroughly align to the specifics
+    // of the proto generation library we are using
+    const reason = user.room()?.update(user, payload as RoomStateUpdateOpts);
     if (reason) user.send(M.sRoomUpdateFailed({ reason }));
   }
 

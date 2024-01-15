@@ -6,12 +6,10 @@ import { LobbyState } from './state/lobby';
 import { UserState } from './state/user';
 import { RoomState } from './state/room';
 
-import { maybePlayerMove } from './protoutil';
-
-import * as NT from './gen/messages_pb';
+import { NT, maybePlayerMove } from '@noita-together/nt-message';
+import { shortHash } from './util';
 
 import type Debug from 'debug';
-import { shortHash } from './util';
 
 let conn_id = 0;
 
@@ -104,6 +102,26 @@ export const createMessageHandler = ({
     users.set(ws, user);
   });
 
+  const handleLobbyAction = (lobby: LobbyState, action: NT.LobbyAction, user: UserState) => {
+    const method = action.action as Exclude<NT.LobbyAction['action'], null | undefined> & `c${string}`;
+    if (!method || !method.startsWith('c')) return;
+
+    if (action.action && typeof lobby[method] === 'function') {
+      const payload: NT.LobbyAction[typeof method] = action[method];
+      if (!payload) return;
+      lobby[method](payload as any, user);
+    }
+  };
+  const handleGameAction = (room: RoomState, action: NT.GameAction, user: UserState) => {
+    const method = action.action as Exclude<NT.GameAction['action'], null | undefined> & `c${string}`;
+    if (!method || !method.startsWith('c')) return;
+
+    if (action.action && typeof room[method] === 'function') {
+      const payload: NT.GameAction[typeof method] = action[method];
+      if (!payload) return;
+      room[method](payload as any, user);
+    }
+  };
   const handleMessage = trycatch(
     'handleMessage',
     (ws: ClientAuthWebSocket, message: ArrayBuffer, isBinary: boolean) => {
@@ -115,42 +133,27 @@ export const createMessageHandler = ({
 
       // optimized message handling for player move updates
       const buf = Buffer.from(message);
-      const playerMovePayload = maybePlayerMove(buf);
-
-      if (playerMovePayload) {
-        user.room()?.playerMoveRaw(playerMovePayload, user);
+      // returns the nested CompactPlayerFrames message when present
+      const cpf = maybePlayerMove(buf);
+      if (cpf.length > 0) {
+        user.room()?.cPlayerMove(cpf, user);
         return;
       }
 
       // fall back to proper decode/encode for everything else
-      const msg = NT.Envelope.fromBinary(buf);
+      const msg = NT.Envelope.decode(buf);
 
-      // debug(user.name, msg.kind.case, msg.kind.value?.action.case);
-
-      const { case: actionType, value: actionPayload } = msg.kind;
-      if (!actionType || !actionPayload) return; // empty "kind"
-
-      const { case: action, value: payload } = actionPayload.action;
-      if (!action || !payload) return; // empty "action"
-
-      let target: LobbyState | RoomState | null = null;
-      switch (actionType) {
+      switch (msg.kind) {
         case 'lobbyAction':
-          target = lobby;
+          if (msg.lobbyAction) handleLobbyAction(lobby, msg.lobbyAction as NT.LobbyAction, user);
           break;
         case 'gameAction':
-          target = user.room();
+          const userRoom = user.room();
+          if (userRoom === null) return;
+          if (msg.gameAction) handleGameAction(userRoom, msg.gameAction as NT.GameAction, user);
           break;
-      }
-
-      try {
-        if (target && action) {
-          const method = (target as any)[action];
-          if (typeof method === 'function') method.call(target, payload, user);
-        }
-      } catch (e) {
-        console.error('Caught error from handler', actionType, action, e);
-        // debug('Caught error from handler', actionType, action, e);
+        default:
+          return;
       }
     },
   );

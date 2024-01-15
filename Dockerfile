@@ -3,14 +3,9 @@ FROM node:21-slim AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm install
-COPY buf.gen.yaml .
-COPY proto/ ./proto/
-RUN npx buf generate proto
-COPY tsconfig.json .
 COPY src/ ./src/
-
+COPY tsconfig.json jest.config.js ./
 # run tests
-COPY jest.config.js .
 RUN npm test
 
 # build
