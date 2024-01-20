@@ -1,6 +1,6 @@
 import { M, NT } from '@noita-together/nt-message';
 import { ClientAuthWebSocket } from '../ws_handlers';
-import { Publishers } from '../util';
+import { Deferred, Publishers, formatDuration, makeDeferred } from '../util';
 import { LobbyActionHandlers } from '../types';
 
 import { IUser, UserState } from './user';
@@ -27,6 +27,8 @@ export class LobbyState implements LobbyActionHandlers {
 
   private rooms = new Map<string, RoomState>();
   private users = new Map<string, UserState>();
+
+  private isDraining = false;
 
   /**
    * Construct a new Lobby
@@ -59,6 +61,16 @@ export class LobbyState implements LobbyActionHandlers {
       rooms: this.rooms.size,
       users: this.users.size,
     };
+  }
+
+  /**
+   *
+   * TODO: create a proto state-change message or something, add a banner to the app.
+   * For now we'll just broadcast a chat message to all rooms.
+   */
+  drain(inMs: number): Promise<void[]> {
+    this.isDraining = true;
+    return Promise.all([...this.rooms.values()].map((room) => room.drain(inMs)));
   }
 
   /**
@@ -218,6 +230,16 @@ export class LobbyState implements LobbyActionHandlers {
   //// message handlers ////
 
   cRoomCreate(payload: NT.ClientRoomCreate, user: UserState) {
+    // we're in drain mode, disallow new room creations
+    if (this.isDraining) {
+      user.send(
+        M.sRoomCreateFailed({
+          reason: 'Server is shutting down for an upgrade. Please re-launch the Noita Together application.',
+        }),
+      );
+      return;
+    }
+
     const { password, ...opts } = payload;
     const room = this.createRoom({
       lobby: this,
@@ -287,6 +309,19 @@ export class LobbyState implements LobbyActionHandlers {
     // user.broadcast(this.topic, M.sUserReadyState({ userId: user.id, ...payload }));
   }
   cStartRun(payload: NT.ClientStartRun, user: UserState) {
+    // we're in drain mode, disallow new room creations
+    if (this.isDraining) {
+      user.send(
+        M.sChat({
+          id: this.createChatId?.() ?? '',
+          userId: SYSTEM_USER.id,
+          name: SYSTEM_USER.name,
+          message: 'Server is shutting down for an upgrade. Please re-launch the Noita Together application.',
+        }),
+      );
+      return;
+    }
+
     user.room()?.startRun(user, payload);
     // this.broadcast(M.sHostStart({ forced: false }));
   }

@@ -137,3 +137,6 @@ if (APP_UNIX_SOCKET) {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+process.on('SIGQUIT', () => {
+  lobby.drain(60 * 60 * 1000).then(shutdown);
+});

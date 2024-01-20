@@ -61,3 +61,34 @@ export const shortHash = (() => {
   const key = randomBytes(256 / 8);
   return (ip: string): string => createHmac('sha256', key).update(ip).digest().subarray(0, 12).toString('base64');
 })();
+
+export const makeDeferred = (cb?: () => void) => {
+  const deferred: {
+    resolve: (value: void | PromiseLike<void>) => void;
+    reject: (reason?: any) => void;
+    promise: Promise<void>;
+  } = {} as any;
+  deferred.promise = new Promise<void>((resolve, reject) => {
+    deferred.resolve = resolve;
+    deferred.reject = reject;
+  }).then(cb);
+  return deferred;
+};
+export type Deferred = ReturnType<typeof makeDeferred>;
+
+export const formatDuration = (durationMs: number) => {
+  const units = [
+    // { label: 'year', seconds: 31_536_000_000 },
+    // { label: 'month', seconds: 2_592_000_000 },
+    // { label: 'day', seconds: 86_400_000 },
+    { label: 'hour', seconds: 3_600_000 },
+    { label: 'minute', seconds: 60_000 },
+    // { label: 'second', seconds: 1_000 },
+  ];
+
+  for (const unit of units) {
+    const unitCount = Math.round(durationMs / unit.seconds);
+    if (unitCount > 0) return `${unitCount} ${unit.label}${unitCount > 1 ? 's' : ''}`;
+  }
+  return 'a moment';
+};

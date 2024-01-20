@@ -5,7 +5,7 @@ import {
   UpdateRoomOpts,
   validateRoomOpts,
 } from '../runtypes/room_opts';
-import { Publishers, createChat } from '../util';
+import { Deferred, Publishers, createChat, formatDuration, makeDeferred } from '../util';
 import { M, NT, tagPlayerMove } from '@noita-together/nt-message';
 import { GameActionHandlers } from '../types';
 import { statsUrl } from '../env_vars';
@@ -73,6 +73,8 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
   private lastFlags: Uint8Array;
   private stats: StatsRecorder | undefined = undefined;
   private pastStats = new Map<string, string>();
+
+  private $drain: Deferred | undefined = undefined;
 
   private chat: (user: IUser, message: string) => NT.Envelope;
   // private playerPositions: PlayerPositions;
@@ -238,6 +240,48 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
   }
 
   /**
+   * Drain the room by the given time
+   *
+   * @param inMs The drop-dead time after which the room will be destroyed
+   */
+  drain(inMs: number): Promise<void> {
+    // notify the room every minute that things are going to implode
+    const drainEnd = Date.now() + inMs;
+
+    const notify = () => {
+      this.broadcast(
+        this.chat(
+          SYSTEM_USER,
+          `Server will shut down in ${formatDuration(
+            drainEnd - Date.now(),
+          )}. Please finish ongoing runs and re-launch the Noita Together application.`,
+        ),
+      );
+    };
+
+    let interval: NodeJS.Timeout;
+    if (!this.$drain) {
+      interval = setInterval(notify, 60_000).unref();
+      notify();
+    }
+
+    let timer: NodeJS.Timeout;
+
+    const deferred = makeDeferred(() => {
+      clearInterval(interval);
+      clearTimeout(timer);
+      this.destroy();
+    });
+
+    const destroyRoomIn = this.inProgress ? inMs : 5 * 60 * 1000;
+    // destroy the room directly after the drop dead time expires
+    timer = setTimeout(deferred.resolve, destroyRoomIn).unref();
+
+    this.$drain = deferred;
+    return deferred.promise;
+  }
+
+  /**
    * Update the room's settings
    *
    * @param actor UserState instance of the user making the change
@@ -350,6 +394,22 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
    */
   private reset() {
     this.inProgress = false;
+
+    // if server is draining, close the room shortly after the run is ended
+    if (this.$drain) {
+      const deferred = this.$drain;
+
+      this.broadcast(
+        this.chat(
+          SYSTEM_USER,
+          'Server is shutting down for an upgrade. Please restart the Noita Together application. Room will self-destruct in 5 minutes!',
+        ),
+      );
+
+      // give people time to copy / view the stats link
+      setTimeout(deferred.resolve, 5 * 60_000).unref();
+    }
+
     if (this.stats) {
       this.pastStats.set(this.stats.id, JSON.stringify(this.stats.toJSON(this)));
     }
