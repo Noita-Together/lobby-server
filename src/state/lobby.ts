@@ -64,6 +64,7 @@ export class LobbyState implements LobbyActionHandlers {
   }
 
   /**
+   * Returns a promise that resolves when all rooms have drained
    *
    * TODO: create a proto state-change message or something, add a banner to the app.
    * For now we'll just broadcast a chat message to all rooms.
