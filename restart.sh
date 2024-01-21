@@ -10,23 +10,41 @@ source "$HERE/.env"
 declare -a MOUNTS=()
 declare -a RUN_ARGS=()
 
-LETSENCRYPT_PATH="/etc/letsencrypt/live/$TLS_SERVER_NAME"
+LE_ROOT="/etc/letsencrypt"
 
-TLS_KEY_FILE="$LETSENCRYPT_PATH/privkey.pem"
-TLS_CERT_FILE="$LETSENCRYPT_PATH/fullchain.pem"
+CONTAINER_LIVE_DIR="/certs/live/$TLS_SERVER_NAME"
+CONTAINER_ARCHIVE_DIR="/certs/archive/$TLS_SERVER_NAME"
+TLS_KEY_FILE="$CONTAINER_LIVE_DIR/privkey.pem"
+TLS_CERT_FILE="$CONTAINER_LIVE_DIR/fullchain.pem"
 
 if [ -n "$LOCAL" ]; then
   ANCHOR_IP="127.0.0.1"
-  MOUNTS=(
-    "-v" "$HERE/tls:$LETSENCRYPT_PATH"
-  )
 else
   ANCHOR_IP="$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/anchor_ipv4/address)"
 fi
 
-# .env listen address wins, otherwise fall back to anchor ip
-if [ -z "$APP_LISTEN_ADDRESS" ] && [ -n "$ANCHOR_IP" ]; then
-  APP_LISTEN_ADDRESS="$ANCHOR_IP"
+if [ -f "$HERE/tls/privkey.pem" ] && [ -f "$HERE/tls/fullchain.pem" ] ; then
+  # when using ./tls the certs are just files, so we only need to mount the live dir
+  MOUNTS=(
+    "-v" "$HERE/tls:$CONTAINER_LIVE_DIR:ro"
+  )
+elif [ -d "$LE_ROOT/live" ] && [ -d "$LE_ROOT/archive" ]; then
+  # we can't test for the files directly, because we run this script as a user that doesn't
+  # have access. so we'll just check that the general directory structure exists and hope
+  # for the best
+
+  # when using let's encrypt, the certs are symlinks to versioned files in the sibling
+  # "archive" directory, so we have to mount both (since the targeted filename in the
+  # archive directory isn't something we can know directly)
+  MOUNTS=(
+    "-v" "$LE_ROOT/live/$TLS_SERVER_NAME:$CONTAINER_LIVE_DIR:ro"
+    "-v" "$LE_ROOT/archive/$TLS_SERVER_NAME:$CONTAINER_ARCHIVE_DIR:ro"
+  )
+elif [ -n "$TLS_SERVER_NAME" ]; then
+  # if we specify TLS_SERVER_NAME, the application will attempt to load certificates and listen on TLS. uWS will segfault
+  # if the files aren't found and the container will crash loop. provide a more useful warning of an invalid configuration...
+  echo "TLS_SERVER_NAME is specified, but cannot find an appropriate certificate path to mount (tried: '$HERE/tls', '$LE_ROOT'). No certificates can be mounted into the container."
+  exit 1
 fi
 
 if [ $# -eq 0 ]; then
@@ -48,6 +66,7 @@ fi
 docker run "${RUN_ARGS[@]}" \
   --network "nt" \
   --network-alias "$TLS_SERVER_NAME" \
+  -p "$ANCHOR_IP:$APP_LISTEN_PORT:$APP_LISTEN_PORT" \
   "${MOUNTS[@]}" \
   -e "JWT_SECRET=$JWT_SECRET" \
   -e "JWT_REFRESH=$JWT_REFRESH" \
