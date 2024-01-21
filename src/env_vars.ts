@@ -5,6 +5,8 @@ const asNumber = (v: unknown, dflt: number): number => {
   return n;
 };
 
+const asString = (v: unknown, dflt: string): string => (typeof v === 'string' && v !== '' ? v : dflt);
+
 const asURL = (v: string): URL | undefined => {
   try {
     return new URL(v);
@@ -60,26 +62,29 @@ export type Env = {
 export const getEnv = (source: any): EnvFns & Env => {
   if (!source || typeof source !== 'object') throw new Error('Invalid env source');
 
-  const JWT_SECRET = source.JWT_SECRET ?? '';
-  const JWT_REFRESH = source.JWT_REFRESH ?? '';
+  const JWT_SECRET = asString(source.JWT_SECRET, '');
+  const JWT_REFRESH = asString(source.JWT_REFRESH, '');
 
-  const TLS_KEY_FILE: string = source.TLS_KEY_FILE ?? '';
-  const TLS_CERT_FILE: string = source.TLS_CERT_FILE ?? '';
-  const TLS_SERVER_NAME: string = source.TLS_SERVER_NAME ?? '';
+  const TLS_KEY_FILE: string = asString(source.TLS_KEY_FILE, '');
+  const TLS_CERT_FILE: string = asString(source.TLS_CERT_FILE, '');
+  const TLS_SERVER_NAME: string = asString(source.TLS_SERVER_NAME, '');
   const USE_TLS = TLS_KEY_FILE !== '' && TLS_CERT_FILE !== '' && TLS_SERVER_NAME !== '';
 
-  const APP_UNIX_SOCKET = source.APP_UNIX_SOCKET ?? '';
-  const APP_LISTEN_ADDRESS = source.APP_LISTEN_ADDRESS ?? '0.0.0.0';
+  const APP_UNIX_SOCKET = asString(source.APP_UNIX_SOCKET, '');
+  const APP_LISTEN_ADDRESS = asString(source.APP_LISTEN_ADDRESS, '0.0.0.0');
   const APP_LISTEN_PORT = asNumber(source.APP_LISTEN_PORT, 4444);
   const USE_UNIX_SOCKET = APP_UNIX_SOCKET !== '';
 
-  const WS_PATH = source.WS_PATH ?? '/ws';
-  const API_PATH = source.API_PATH ?? '/api';
+  const WS_PATH = asString(source.WS_PATH, '/ws');
+  const API_PATH = asString(source.API_PATH, '/api');
 
-  const DEV_MODE = source.DEV_MODE === 'true';
+  const DEV_MODE = asString(source.DEV_MODE, 'false') === 'true';
 
   const WEBFACE_ORIGIN = asOrigin(source.WEBFACE_ORIGIN, 'https://noitatogether.com');
-  const STATS_URL_TEMPLATE = source.STATS_URL_TEMPLATE ?? `${WEBFACE_ORIGIN}/api/stats/[ROOM_ID]/[STATS_ID]/html`;
+  const STATS_URL_TEMPLATE = asString(
+    source.STATS_URL_TEMPLATE,
+    `${WEBFACE_ORIGIN}/api/stats/[ROOM_ID]/[STATS_ID]/html`,
+  );
 
   // app tunable values
   // configured in seconds at the env level, but stored in milliseconds at the app level
