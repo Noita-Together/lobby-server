@@ -2,6 +2,9 @@
 
 set -e
 
-IMAGE_NAME="lobby-server"
+HERE=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+# shellcheck source=/dev/null
+source "$HERE/.env"
 
 docker build -t "$IMAGE_NAME" .

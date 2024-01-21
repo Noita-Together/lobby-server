@@ -106,18 +106,3 @@ export const formatBytes = (bytes: number) => {
   }
   return `${bytes.toFixed(2)} B`;
 };
-
-export const debounce = <A, As extends A[]>(minMs: number, fn: (dropped: number, ...args: As) => void) => {
-  let last = 0;
-  let dropped = 0;
-  return (...args: As) => {
-    const now = Date.now();
-    if (now - last > minMs) {
-      last = now;
-      dropped = 0;
-      fn(dropped, ...args);
-    } else {
-      dropped++;
-    }
-  };
-};

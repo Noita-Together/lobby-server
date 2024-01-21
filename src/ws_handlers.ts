@@ -7,8 +7,9 @@ import { LobbyState } from './state/lobby';
 import { UserState } from './state/user';
 import { RoomState } from './state/room';
 
-import { debounce, formatBytes, shortHash } from './util';
-import { WARN_PAYLOAD_LENGTH_BYTES } from './env_vars';
+import { formatBytes, shortHash } from './util';
+import { defaultEnv } from './env_vars';
+const { WARN_PAYLOAD_LENGTH_BYTES } = defaultEnv;
 
 import type Debug from 'debug';
 

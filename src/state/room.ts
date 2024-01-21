@@ -8,7 +8,8 @@ import {
 import { Deferred, Publishers, createChat, formatDuration, makeDeferred } from '../util';
 import { M, NT, tagPlayerMove } from '@noita-together/nt-message';
 import { GameActionHandlers } from '../types';
-import { DRAIN_GRACE_TIMEOUT_MS, DRAIN_NOTIFY_INTERVAL_MS, statsUrl } from '../env_vars';
+import { defaultEnv, statsUrl } from '../env_vars';
+const { DRAIN_GRACE_TIMEOUT_MS, DRAIN_NOTIFY_INTERVAL_MS } = defaultEnv;
 
 import { IUser, UserState } from './user';
 import { LobbyState, SYSTEM_USER } from './lobby';
