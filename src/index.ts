@@ -11,12 +11,15 @@ import {
   APP_LISTEN_PORT,
   APP_UNIX_SOCKET,
   DEV_MODE,
+  DRAIN_DROP_DEAD_TIMEOUT_MS,
   JWT_REFRESH,
   JWT_SECRET,
   TLS_CERT_FILE,
   TLS_KEY_FILE,
   TLS_SERVER_NAME,
   USE_TLS,
+  UWS_IDLE_TIMEOUT,
+  UWS_MAX_PAYLOAD_LENGTH_BYTES,
   WEBFACE_ORIGIN,
   WS_PATH,
   assertEnvRequirements,
@@ -68,10 +71,10 @@ const setCorsHeaders = (res: uWS.HttpResponse) => {
 const bindHandlers = (serverName?: string) =>
   (serverName ? app.domain(serverName) : app)
     .ws<TaggedClientAuth>(`${WS_PATH}/:token`, {
-      idleTimeout: 120,
+      idleTimeout: UWS_IDLE_TIMEOUT,
       sendPingsAutomatically: true,
       maxLifetime: 0,
-      maxPayloadLength: 16 * 1024 * 1024,
+      maxPayloadLength: UWS_MAX_PAYLOAD_LENGTH_BYTES,
       upgrade: handleUpgrade,
       open: handleOpen,
       close: handleClose,
@@ -138,5 +141,5 @@ if (APP_UNIX_SOCKET) {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 process.on('SIGQUIT', () => {
-  lobby.drain(60 * 60 * 1000).then(shutdown);
+  lobby.drain(DRAIN_DROP_DEAD_TIMEOUT_MS).then(shutdown);
 });

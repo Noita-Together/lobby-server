@@ -85,7 +85,7 @@ export const createTestEnv = (
         return 1;
       },
       getUserData(): TaggedClientAuth {
-        return { conn_id: 0, ...clientAuth };
+        return { conn_id: 0, ip_hash: 'abc', ...clientAuth };
       },
       end(code?: number, shortMessage?: RecognizedString) {
         closedSockets.push({ socket: user, code, shortMessage });

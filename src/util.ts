@@ -90,5 +90,34 @@ export const formatDuration = (durationMs: number) => {
     const unitCount = Math.round(durationMs / unit.seconds);
     if (unitCount > 0) return `${unitCount} ${unit.label}${unitCount > 1 ? 's' : ''}`;
   }
-  return 'a moment';
+  return 'moments';
+};
+
+export const formatBytes = (bytes: number) => {
+  const units = [
+    { label: 'GiB', bytes: 1024 ** 3 },
+    { label: 'MiB', bytes: 1024 ** 2 },
+    { label: 'KiB', bytes: 1024 },
+  ];
+
+  for (const unit of units) {
+    const unitCount = bytes / unit.bytes;
+    if (unitCount >= 1) return `${unitCount.toFixed(2)} ${unit.label}`;
+  }
+  return `${bytes.toFixed(2)} B`;
+};
+
+export const debounce = <A, As extends A[]>(minMs: number, fn: (dropped: number, ...args: As) => void) => {
+  let last = 0;
+  let dropped = 0;
+  return (...args: As) => {
+    const now = Date.now();
+    if (now - last > minMs) {
+      last = now;
+      dropped = 0;
+      fn(dropped, ...args);
+    } else {
+      dropped++;
+    }
+  };
 };

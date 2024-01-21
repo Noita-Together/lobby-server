@@ -8,7 +8,7 @@ import {
 import { Deferred, Publishers, createChat, formatDuration, makeDeferred } from '../util';
 import { M, NT, tagPlayerMove } from '@noita-together/nt-message';
 import { GameActionHandlers } from '../types';
-import { statsUrl } from '../env_vars';
+import { DRAIN_GRACE_TIMEOUT_MS, DRAIN_NOTIFY_INTERVAL_MS, statsUrl } from '../env_vars';
 
 import { IUser, UserState } from './user';
 import { LobbyState, SYSTEM_USER } from './lobby';
@@ -261,7 +261,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
 
     let interval: NodeJS.Timeout;
     if (!this.$drain) {
-      interval = setInterval(notify, 60_000).unref();
+      interval = setInterval(notify, DRAIN_NOTIFY_INTERVAL_MS).unref();
       notify();
     }
 
@@ -273,7 +273,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
       this.destroy();
     });
 
-    const destroyRoomIn = this.inProgress ? inMs : 5 * 60 * 1000;
+    const destroyRoomIn = this.inProgress ? inMs : DRAIN_GRACE_TIMEOUT_MS;
     // destroy the room directly after the drop dead time expires
     timer = setTimeout(deferred.resolve, destroyRoomIn).unref();
 
@@ -402,12 +402,14 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
       this.broadcast(
         this.chat(
           SYSTEM_USER,
-          'Server is shutting down for an upgrade. Please restart the Noita Together application. Room will self-destruct in 5 minutes!',
+          `Server is shutting down for an upgrade. Please restart the Noita Together application. Room will self-destruct in ${formatDuration(
+            DRAIN_GRACE_TIMEOUT_MS,
+          )}!`,
         ),
       );
 
       // give people time to copy / view the stats link
-      setTimeout(deferred.resolve, 5 * 60_000).unref();
+      setTimeout(deferred.resolve, DRAIN_GRACE_TIMEOUT_MS).unref();
     }
 
     if (this.stats) {

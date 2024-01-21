@@ -98,7 +98,7 @@ describe('server drain', () => {
     expect(cb).toHaveBeenCalledTimes(1);
   });
   it('prevents creation of new rooms when draining', async () => {
-    const { testSocket, handleOpen, handleMessage, lobby, expectLobbyAction } = createTestEnv(false);
+    const { testSocket, handleOpen, handleMessage, lobby, sentMessages, expectLobbyAction } = createTestEnv(false);
 
     lobby.drain(2);
     jest.advanceTimersByTime(10);
@@ -110,6 +110,7 @@ describe('server drain', () => {
 
     const sRoomCreated = expectLobbyAction('sRoomCreateFailed');
     expect(sRoomCreated.reason).toMatch(/shutting down/i);
+    expect(sentMessages).toEqual([]);
   });
   it('prevents starting new runs when draining', async () => {
     const { testSocket, handleOpen, handleMessage, lobby, sentMessages, expectGameAction, expectLobbyAction } =
@@ -120,17 +121,17 @@ describe('server drain', () => {
     expectLobbyAction('sRoomCreated');
     expectLobbyAction('sRoomAddToList');
 
-    lobby.drain(2);
+    lobby.drain(30_000);
 
     jest.advanceTimersByTime(1);
     await flushPromises();
 
     const chat1 = expectGameAction('sChat');
-    expect(chat1.message).toMatch(/will shut down/i);
+    expect(chat1.message).toMatch(/will shut down.*minute/i);
 
     handleMessage(user, M.cStartRun({}, true), true);
 
-    jest.advanceTimersByTime(1);
+    jest.advanceTimersByTime(29_999);
     await flushPromises();
 
     const chat2 = expectGameAction('sChat');
@@ -171,7 +172,8 @@ describe('server drain', () => {
     await flushPromises();
 
     const chat2 = expectGameAction('sChat');
-    expect(chat2.message).toMatch(/will shut down/i);
+    expect(chat2.message).toMatch(/will shut down.*minutes/i);
+    expect(sentMessages).toEqual([]);
   });
   it('notifies rooms immediately of a pending shutdown', async () => {
     jest.useFakeTimers();
@@ -209,6 +211,7 @@ describe('server drain', () => {
       return expectGameAction('sChat');
     })();
 
-    expect(chat2.message).toMatch(/shutting down/i);
+    expect(chat2.message).toMatch(/shutting down.*self-destruct.*minutes/i);
+    expect(sentMessages).toEqual([]);
   });
 });

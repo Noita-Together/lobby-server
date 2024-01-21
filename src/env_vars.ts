@@ -21,6 +21,20 @@ export const WEBFACE_ORIGIN = process.env.WEBFACE_ORIGIN ?? 'noitatogether.com';
 export const STATS_URL_TEMPLATE =
   process.env.STATS_URL_TEMPLATE ?? 'https://noitatogether.com/api/stats/[ROOM_ID]/[STATS_ID]/html';
 
+// app tunable values
+// configured in seconds at the env level, but stored in milliseconds at the app level
+export const DRAIN_DROP_DEAD_TIMEOUT_MS = asNumber(process.env.DRAIN_DROP_DEAD_TIMEOUT_S, 60 * 60) * 1000;
+export const DRAIN_GRACE_TIMEOUT_MS = asNumber(process.env.DRAIN_GRACE_TIMEOUT_S, 5 * 60) * 1000;
+export const DRAIN_NOTIFY_INTERVAL_MS = asNumber(process.env.DRAIN_NOTIFY_INTERVAL_S, 1 * 60) * 1000;
+
+// uWS tunable values
+export const UWS_IDLE_TIMEOUT = asNumber(process.env.UWS_IDLE_TIMEOUT, 120);
+export const UWS_MAX_PAYLOAD_LENGTH_BYTES = asNumber(process.env.UWS_MAX_PAYLOAD_LENGTH_BYTES, 16 * 1024 * 1024);
+export const WARN_PAYLOAD_LENGTH_BYTES = asNumber(
+  process.env.WARN_PAYLOAD_LENGTH_BYTES,
+  Math.floor(UWS_MAX_PAYLOAD_LENGTH_BYTES * 0.8),
+);
+
 export const statsUrl = (() => {
   const statsUrl = (roomId: string, statsId: string) =>
     STATS_URL_TEMPLATE.replace(/\[([^\]]+)\]/g, (match, capture) => {
