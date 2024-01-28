@@ -2,10 +2,35 @@
 
 set -e
 
+function usage() {
+  echo "$1"
+  echo "Use: $0 <$(bg_getenvs)> <$(bg_getbgs)>"
+  exit 1
+}
+
 HERE=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 # shellcheck source=/dev/null
 source "$HERE/.env"
+
+# shellcheck source=/dev/null
+source "$HERE/script-common.sh"
+
+BG_ENV="$(bg_getenv "$1")" || usage "Unknown env: $1";
+BG_VALUE="$(bg_getbg "$2")" || usage "Unknown blue/green value: $2";
+shift; shift
+
+TAG="$BG_ENV-$BG_VALUE"
+CONTAINER_NAME="$CONTAINER_NAME-$TAG"
+
+CONTAINER_PORT="$(bg_getport "$BG_ENV" "$BG_VALUE")" || exit 1
+
+IMAGE_HASH="$(docker image ls -q "$IMAGE_NAME:$TAG")"
+if [ -z "$IMAGE_HASH" ]; then
+  echo "Image not found: $IMAGE_NAME:$TAG"
+  echo "Maybe run ./build.sh first?"
+  exit 1
+fi
 
 declare -a MOUNTS=()
 declare -a RUN_ARGS=()
@@ -53,6 +78,7 @@ if [ $# -eq 0 ]; then
   RUN_ARGS=(
     -d --name "$CONTAINER_NAME"
     --restart "unless-stopped"
+    -p "$ANCHOR_IP:$CONTAINER_PORT:$APP_LISTEN_PORT" \
   )
   docker stop "$CONTAINER_NAME" || true
   docker rm "$CONTAINER_NAME" || true
@@ -66,7 +92,6 @@ fi
 docker run "${RUN_ARGS[@]}" \
   --network "nt" \
   --network-alias "$TLS_SERVER_NAME" \
-  -p "$ANCHOR_IP:$APP_LISTEN_PORT:$APP_LISTEN_PORT" \
   "${MOUNTS[@]}" \
   -e "JWT_SECRET=$JWT_SECRET" \
   -e "JWT_REFRESH=$JWT_REFRESH" \
@@ -87,4 +112,4 @@ docker run "${RUN_ARGS[@]}" \
   -e "UWS_IDLE_TIMEOUT_S=$UWS_IDLE_TIMEOUT_S" \
   -e "UWS_MAX_PAYLOAD_LENGTH_BYTES=$UWS_MAX_PAYLOAD_LENGTH_BYTES" \
   -e "WARN_PAYLOAD_LENGTH_BYTES=$WARN_PAYLOAD_LENGTH_BYTES" \
-  "$IMAGE_NAME" "$@"
+  "$IMAGE_NAME:$TAG" "$@"
