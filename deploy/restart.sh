@@ -43,7 +43,7 @@ TLS_KEY_FILE="$CONTAINER_LIVE_DIR/privkey.pem"
 TLS_CERT_FILE="$CONTAINER_LIVE_DIR/fullchain.pem"
 
 if [ -n "$LOCAL" ]; then
-  ANCHOR_IP="127.0.0.1"
+  ANCHOR_IP="0.0.0.0"
 else
   ANCHOR_IP="$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/anchor_ipv4/address)"
 fi
