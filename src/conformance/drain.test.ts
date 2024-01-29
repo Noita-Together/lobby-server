@@ -30,7 +30,7 @@ describe('server drain', () => {
     await flushPromises();
     expect(cb).toHaveBeenCalledTimes(1);
   });
-  it('resolves after the drop-dead time with open rooms that are still in a run', async () => {
+  it("resolves after the drop-dead timeout with open rooms that ARE actively in a run that doesn't finish", async () => {
     jest.useFakeTimers();
 
     const { testSocket, handleOpen, handleMessage, lobby } = createTestEnv(false);
@@ -40,35 +40,13 @@ describe('server drain', () => {
     handleMessage(user, M.cStartRun({}, true), true);
 
     const cb = jest.fn();
-    lobby.drain(2).then(cb);
+    lobby.drain(10 * 60 * 1000).then(cb);
 
-    jest.advanceTimersByTime(1);
+    jest.advanceTimersByTime(6 * 60 * 1000);
     await flushPromises();
     expect(cb).toHaveBeenCalledTimes(0);
 
-    jest.advanceTimersByTime(1);
-    await flushPromises();
-    expect(cb).toHaveBeenCalledTimes(1);
-  });
-  it('resolves after the drop-dead time with open rooms that ARE actively in a run when the run ends', async () => {
-    jest.useFakeTimers();
-
-    const { testSocket, handleOpen, handleMessage, lobby } = createTestEnv(false);
-    const user = testSocket('id', 'name');
-    handleOpen(user);
-    handleMessage(user, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name's room" }, true), true);
-    handleMessage(user, M.cStartRun({}, true), true);
-
-    const cb = jest.fn();
-    lobby.drain(2).then(cb);
-
-    jest.advanceTimersByTime(1);
-    await flushPromises();
-    expect(cb).toHaveBeenCalledTimes(0);
-
-    handleMessage(user, M.cRunOver({}, true), true);
-
-    jest.advanceTimersByTime(1);
+    jest.advanceTimersByTime(4 * 60 * 1000);
     await flushPromises();
     expect(cb).toHaveBeenCalledTimes(1);
   });
@@ -95,6 +73,37 @@ describe('server drain', () => {
 
     jest.advanceTimersByTime(1);
     await flushPromises();
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+  it('resolves immediately when all open rooms are destroyed', async () => {
+    jest.useFakeTimers();
+
+    const { testSocket, handleOpen, handleMessage, lobby } = createTestEnv(false);
+    const user1 = testSocket('id1', 'name1');
+
+    handleOpen(user1);
+    handleMessage(user1, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name1's room" }, true), true);
+
+    const user2 = testSocket('id2', 'name2');
+    handleOpen(user2);
+    handleMessage(user2, M.cRoomCreate({ gamemode: 0, maxUsers: 5, name: "name2's room" }, true), true);
+
+    const cb = jest.fn();
+    lobby.drain(2).then(cb);
+
+    jest.advanceTimersByTime(1);
+    await flushPromises();
+
+    handleMessage(user1, M.cLeaveRoom({ userId: 'unused' }, true), true);
+    jest.advanceTimersByTime(1);
+    await flushPromises();
+
+    expect(cb).toHaveBeenCalledTimes(0);
+
+    handleMessage(user2, M.cLeaveRoom({ userId: 'unused' }, true), true);
+    jest.advanceTimersByTime(1);
+    await flushPromises();
+
     expect(cb).toHaveBeenCalledTimes(1);
   });
   it('prevents creation of new rooms when draining', async () => {
@@ -175,7 +184,7 @@ describe('server drain', () => {
     expect(chat2.message).toMatch(/will shut down.*minutes/i);
     expect(sentMessages).toEqual([]);
   });
-  it('notifies rooms immediately of a pending shutdown', async () => {
+  it('notifies rooms after a run finishes', async () => {
     jest.useFakeTimers();
 
     const { testSocket, handleOpen, handleMessage, lobby, sentMessages, expectGameAction, expectLobbyAction } =

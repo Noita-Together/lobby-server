@@ -632,6 +632,10 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
     this.lobby.roomDestroyed(this);
     this.users.clear();
 
+    if (this.$drain) {
+      this.$drain.resolve();
+    }
+
     debug(this.id, 'destroyed');
   }
 
