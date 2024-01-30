@@ -1,4 +1,5 @@
 import { HttpRequest, HttpResponse, WebSocket, us_socket_context_t } from 'uWebSockets.js';
+import { NT, maybePlayerMove } from '@noita-together/nt-message';
 
 import { ClientAuth } from './runtypes/client_auth';
 
@@ -6,8 +7,9 @@ import { LobbyState } from './state/lobby';
 import { UserState } from './state/user';
 import { RoomState } from './state/room';
 
-import { NT, maybePlayerMove } from '@noita-together/nt-message';
-import { shortHash } from './util';
+import { formatBytes, shortHash } from './util';
+import { defaultEnv } from './env_vars';
+const { WARN_PAYLOAD_LENGTH_BYTES } = defaultEnv;
 
 import type Debug from 'debug';
 
@@ -15,6 +17,7 @@ let conn_id = 0;
 
 export type TaggedClientAuth = {
   conn_id: number;
+  ip_hash: string;
 } & ClientAuth;
 export type ClientAuthWebSocket = Pick<
   WebSocket<TaggedClientAuth>,
@@ -79,8 +82,8 @@ export const createMessageHandler = ({
         // "cork" is weirdly named, but essentially means to bundle potentially multiple
         // syscalls into a single operation
         res.cork(() => {
-          res.upgrade(
-            { conn_id: thisConnId, ...clientAuth },
+          res.upgrade<TaggedClientAuth>(
+            { conn_id: thisConnId, ip_hash: ip, ...clientAuth },
             secWebSocketKey,
             secWebSocketProtocol,
             secWebSocketExtensions,
@@ -122,6 +125,19 @@ export const createMessageHandler = ({
       room[method](payload as any, user);
     }
   };
+
+  const warnLargePayload = (ws: ClientAuthWebSocket, byteLength: number, user: UserState): void => {
+    const { ip_hash, conn_id } = ws.getUserData();
+    const { name: username } = user;
+    const room_id = user.room()?.id;
+    const message_size = formatBytes(byteLength);
+    debug(
+      ip_hash,
+      conn_id,
+      `username=${username} room_id=${room_id} message_size=${message_size}: received large message approaching limit`,
+    );
+  };
+
   const handleMessage = trycatch(
     'handleMessage',
     (ws: ClientAuthWebSocket, message: ArrayBuffer, isBinary: boolean) => {
@@ -129,6 +145,10 @@ export const createMessageHandler = ({
       if (!user) {
         console.error('BUG: userState not present in weakmap');
         return;
+      }
+
+      if (message.byteLength > WARN_PAYLOAD_LENGTH_BYTES) {
+        warnLargePayload(ws, message.byteLength, user);
       }
 
       // optimized message handling for player move updates

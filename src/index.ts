@@ -5,22 +5,34 @@ import { LobbyState } from './state/lobby';
 import { createJwtFns } from './jwt';
 import { TaggedClientAuth, createMessageHandler } from './ws_handlers';
 import { BindPublishers } from './util';
-import {
-  API_PATH,
-  APP_LISTEN_ADDRESS,
-  APP_LISTEN_PORT,
-  APP_UNIX_SOCKET,
-  DEV_MODE,
-  JWT_REFRESH,
+import { defaultEnv } from './env_vars';
+
+const {
   JWT_SECRET,
-  TLS_CERT_FILE,
+  JWT_REFRESH,
+
   TLS_KEY_FILE,
+  TLS_CERT_FILE,
   TLS_SERVER_NAME,
   USE_TLS,
-  WEBFACE_ORIGIN,
+
+  APP_UNIX_SOCKET,
+  APP_LISTEN_ADDRESS,
+  APP_LISTEN_PORT,
+  USE_UNIX_SOCKET,
+
   WS_PATH,
-  assertEnvRequirements,
-} from './env_vars';
+  API_PATH,
+
+  DEV_MODE,
+
+  WEBFACE_ORIGIN,
+
+  DRAIN_DROP_DEAD_TIMEOUT_MS,
+
+  UWS_IDLE_TIMEOUT_S,
+  UWS_MAX_PAYLOAD_LENGTH_BYTES,
+} = defaultEnv;
 
 import Debug from 'debug';
 const debug = Debug('nt');
@@ -31,7 +43,8 @@ const publishers = BindPublishers(app);
 const lobby = new LobbyState(publishers, DEV_MODE);
 
 if (require.main === module) {
-  assertEnvRequirements();
+  defaultEnv.assertRequirements();
+  debug('env', defaultEnv.getForDisplay());
 }
 
 const { verifyToken } = createJwtFns(JWT_SECRET, JWT_REFRESH);
@@ -68,10 +81,10 @@ const setCorsHeaders = (res: uWS.HttpResponse) => {
 const bindHandlers = (serverName?: string) =>
   (serverName ? app.domain(serverName) : app)
     .ws<TaggedClientAuth>(`${WS_PATH}/:token`, {
-      idleTimeout: 120,
+      idleTimeout: UWS_IDLE_TIMEOUT_S,
       sendPingsAutomatically: true,
       maxLifetime: 0,
-      maxPayloadLength: 16 * 1024 * 1024,
+      maxPayloadLength: UWS_MAX_PAYLOAD_LENGTH_BYTES,
       upgrade: handleUpgrade,
       open: handleOpen,
       close: handleClose,
@@ -129,7 +142,7 @@ if (USE_TLS) {
   bindHandlers();
 }
 
-if (APP_UNIX_SOCKET) {
+if (USE_UNIX_SOCKET) {
   app.listen_unix(onListen(`[unix:${APP_UNIX_SOCKET}]`), APP_UNIX_SOCKET);
 } else {
   app.listen(APP_LISTEN_ADDRESS, APP_LISTEN_PORT, onListen(`${APP_LISTEN_ADDRESS}:${APP_LISTEN_PORT}`));
@@ -137,3 +150,6 @@ if (APP_UNIX_SOCKET) {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+process.on('SIGQUIT', () => {
+  lobby.drain(DRAIN_DROP_DEAD_TIMEOUT_MS).then(shutdown);
+});

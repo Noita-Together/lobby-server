@@ -1,7 +1,7 @@
 /node_modules
 /dist
 /coverage
-/.env
+/deploy/.env
 /.vscode/launch.json
 /src/gen
 ndjson
