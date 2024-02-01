@@ -86,7 +86,7 @@ function cf_set_backend_port() {
     -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
     "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/rulesets/$RULESET_ID/rules/$RULE_ID" \
-    --data '{"action":"route","expression":"(http.host eq \"'"$BACKEND_HOSTNAME"'\")","description": "Noita Together B/G ('"$ENV_NAME"':'"$COLOR_NAME"')","action_parameters":{"origin":{"port": '"$1"'}}}' || true
+    --data '{"action":"route","expression":"(http.host eq \"'"$BACKEND_HOSTNAME"'\")","description": "Noita Together B/G ('"$ENV_NAME"':'"$NEW_COLOR"')","action_parameters":{"origin":{"port": '"$1"'}}}' || true
 }
 
 
