@@ -13,11 +13,9 @@ HERE=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 # shellcheck disable=SC1091
 source "$HERE/script-common.sh"
 
-ENVDIR="$(bg_getenvdir "$1")" || usage "Unknown env: $1";
+BASE="$(bg_get_base)" || exit 1
+ENV_NAME="$(bg_check_dir "$BASE" "$1")" || usage "Unknown env dir: $1"
+CONFIG_DIR="$BASE/$ENV_NAME"
+ACTIVE_FILE_PATH="$CONFIG_DIR/$(bg_check_file "$CONFIG_DIR" "active")" || usage "No 'active' file present in $CONFIG_DIR"
 
-if [ ! -d "$ENVDIR" ]; then
-  echo "Resolved env dir: $ENVDIR but it doesn't exist!"
-  exit 1
-fi
-
-cat "$ENVDIR/active"
+cat "$ACTIVE_FILE_PATH"

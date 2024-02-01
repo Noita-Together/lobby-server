@@ -91,7 +91,10 @@ const bindHandlers = (serverName?: string) =>
       message: handleMessage,
     })
     .get(`${API_PATH}/health`, (res) => {
-      const jsonStr = JSON.stringify(lobby.getInfo());
+      const env: { env?: string; color?: string } = {};
+      if (defaultEnv.ENV_NAME) env.env = defaultEnv.ENV_NAME;
+      if (defaultEnv.COLOR_NAME) env.color = defaultEnv.COLOR_NAME;
+      const jsonStr = JSON.stringify({ ...env, ...lobby.getInfo() });
       setCorsHeaders(res);
       res.writeStatus('200 OK').writeHeader('Content-Type', 'application/json; charset=utf-8').end(jsonStr);
     })

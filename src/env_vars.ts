@@ -29,6 +29,9 @@ export type EnvFns = {
   getForDisplay: () => Env;
 };
 export type Env = {
+  ENV_NAME: string;
+  COLOR_NAME: string;
+
   JWT_SECRET: string;
   JWT_REFRESH: string;
 
@@ -61,6 +64,9 @@ export type Env = {
 
 export const getEnv = (source: any): EnvFns & Env => {
   if (!source || typeof source !== 'object') throw new Error('Invalid env source');
+
+  const ENV_NAME = asString(source.ENV_NAME, '');
+  const COLOR_NAME = asString(source.COLOR_NAME, '');
 
   const JWT_SECRET = asString(source.JWT_SECRET, '');
   const JWT_REFRESH = asString(source.JWT_REFRESH, '');
@@ -101,6 +107,9 @@ export const getEnv = (source: any): EnvFns & Env => {
   );
 
   const env: Env = {
+    ENV_NAME,
+    COLOR_NAME,
+
     JWT_SECRET,
     JWT_REFRESH,
 

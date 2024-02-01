@@ -4,7 +4,7 @@ set -e
 
 function usage() {
   echo "$1"
-  echo "Use: $0 <$(bg_getenvs)> <$(bg_getbgs)>"
+  echo "Use: $0 <$(bg_get_envs)> <$(bg_get_colors)>"
   exit 1
 }
 
@@ -16,19 +16,28 @@ source "$HERE/.env"
 # shellcheck source=/dev/null
 source "$HERE/script-common.sh"
 
-BG_ENV="$(bg_getenv "$1")" || usage "Unknown env: $1";
-BG_VALUE="$(bg_getbg "$2")" || usage "Unknown blue/green value: $2";
-shift; shift
+BASE="$(bg_get_base)" || exit 1
+ENV_NAME="$(bg_check_dir "$BASE" "$1")" || usage "Unknown env dir: $1"
+shift
+CONFIG_DIR="$BASE/$ENV_NAME"
+COLOR_NAME="$(bg_check_color "$CONFIG_DIR" "$1")" || usage "Invalid color: $1"
+shift
+COLOR_FILE_PATH="$CONFIG_DIR/$(bg_check_file "$CONFIG_DIR" "$COLOR_NAME")" || usage "No '$COLOR_NAME' file present in $CONFIG_DIR"
+CONFIG_FILE_PATH="$CONFIG_DIR/$(bg_check_file "$CONFIG_DIR" "config")" || usage "No 'config' file present in $CONFIG_DIR"
 
-TAG="$BG_ENV-$BG_VALUE"
+# shellcheck disable=SC1090
+source "$COLOR_FILE_PATH"
+
+# shellcheck disable=SC1090
+source "$CONFIG_FILE_PATH"
+
+TAG="$ENV_NAME-$COLOR_NAME"
 CONTAINER_NAME="$CONTAINER_NAME-$TAG"
-
-CONTAINER_PORT="$(bg_getport "$BG_ENV" "$BG_VALUE")" || exit 1
 
 IMAGE_HASH="$(docker image ls -q "$IMAGE_NAME:$TAG")"
 if [ -z "$IMAGE_HASH" ]; then
   echo "Image not found: $IMAGE_NAME:$TAG"
-  echo "Maybe run ./build.sh first?"
+  echo "Maybe run build.sh first?"
   exit 1
 fi
 
@@ -41,12 +50,6 @@ CONTAINER_LIVE_DIR="/certs/live/$TLS_SERVER_NAME"
 CONTAINER_ARCHIVE_DIR="/certs/archive/$TLS_SERVER_NAME"
 TLS_KEY_FILE="$CONTAINER_LIVE_DIR/privkey.pem"
 TLS_CERT_FILE="$CONTAINER_LIVE_DIR/fullchain.pem"
-
-if [ -n "$LOCAL" ]; then
-  ANCHOR_IP="0.0.0.0"
-else
-  ANCHOR_IP="$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/anchor_ipv4/address)"
-fi
 
 if [ -f "$HERE/tls/privkey.pem" ] && [ -f "$HERE/tls/fullchain.pem" ] ; then
   # when using ./tls the certs are just files, so we only need to mount the live dir
@@ -78,7 +81,7 @@ if [ $# -eq 0 ]; then
   RUN_ARGS=(
     -d --name "$CONTAINER_NAME"
     --restart "unless-stopped"
-    -p "$ANCHOR_IP:$CONTAINER_PORT:$APP_LISTEN_PORT" \
+    -p "$BACKEND_PORT:$APP_LISTEN_PORT" \
   )
   docker stop "$CONTAINER_NAME" || true
   docker rm "$CONTAINER_NAME" || true
@@ -93,6 +96,8 @@ docker run "${RUN_ARGS[@]}" \
   --network "nt" \
   --network-alias "$TLS_SERVER_NAME" \
   "${MOUNTS[@]}" \
+  -e "ENV_NAME=$ENV_NAME" \
+  -e "COLOR_NAME=$COLOR_NAME" \
   -e "JWT_SECRET=$JWT_SECRET" \
   -e "JWT_REFRESH=$JWT_REFRESH" \
   -e "TLS_KEY_FILE=$TLS_KEY_FILE" \
