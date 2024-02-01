@@ -6,7 +6,7 @@ function bg_read_secret() {
   HERE=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
   USER_CLOUDFLARE_SECRET="$HOME/.cloudflare.secret"
-  REPO_CLOUDFLARE_SECRET="$HERE/deploy/cloudflare.secret"
+  REPO_CLOUDFLARE_SECRET="$HERE/cloudflare.secret"
 
   if [ -r "$USER_CLOUDFLARE_SECRET" ]; then
     # shellcheck disable=SC1090
