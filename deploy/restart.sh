@@ -51,12 +51,6 @@ CONTAINER_ARCHIVE_DIR="/certs/archive/$TLS_SERVER_NAME"
 TLS_KEY_FILE="$CONTAINER_LIVE_DIR/privkey.pem"
 TLS_CERT_FILE="$CONTAINER_LIVE_DIR/fullchain.pem"
 
-if [ -n "$LOCAL" ]; then
-  ANCHOR_IP="0.0.0.0"
-else
-  ANCHOR_IP="$(curl -s http://169.254.169.254/metadata/v1/interfaces/public/0/anchor_ipv4/address)"
-fi
-
 if [ -f "$HERE/tls/privkey.pem" ] && [ -f "$HERE/tls/fullchain.pem" ] ; then
   # when using ./tls the certs are just files, so we only need to mount the live dir
   MOUNTS=(
@@ -87,7 +81,7 @@ if [ $# -eq 0 ]; then
   RUN_ARGS=(
     -d --name "$CONTAINER_NAME"
     --restart "unless-stopped"
-    -p "$ANCHOR_IP:$BACKEND_PORT:$APP_LISTEN_PORT" \
+    -p "$BACKEND_PORT:$APP_LISTEN_PORT" \
   )
   docker stop "$CONTAINER_NAME" || true
   docker rm "$CONTAINER_NAME" || true
