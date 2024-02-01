@@ -102,6 +102,8 @@ docker run "${RUN_ARGS[@]}" \
   --network "nt" \
   --network-alias "$TLS_SERVER_NAME" \
   "${MOUNTS[@]}" \
+  -e "ENV_NAME=$ENV_NAME" \
+  -e "COLOR_NAME=$COLOR_NAME" \
   -e "JWT_SECRET=$JWT_SECRET" \
   -e "JWT_REFRESH=$JWT_REFRESH" \
   -e "TLS_KEY_FILE=$TLS_KEY_FILE" \
