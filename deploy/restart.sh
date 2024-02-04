@@ -92,7 +92,9 @@ else
   )
 fi
 
-docker run "${RUN_ARGS[@]}" \
+# thanks https://stackoverflow.com/a/73220812
+# MSYS_NO_PATHCONV=1 -> prevent git bash from mangling paths
+MSYS_NO_PATHCONV=1 docker run "${RUN_ARGS[@]}" \
   --network "nt" \
   --network-alias "$TLS_SERVER_NAME" \
   "${MOUNTS[@]}" \
