@@ -81,7 +81,7 @@ if [ $# -eq 0 ]; then
   RUN_ARGS=(
     -d --name "$CONTAINER_NAME"
     --restart "unless-stopped"
-    -p "$BACKEND_PORT:$APP_LISTEN_PORT" \
+    -p "$BACKEND_PORT:${APP_LISTEN_PORT:-4444}" \
   )
   docker stop "$CONTAINER_NAME" || true
   docker rm "$CONTAINER_NAME" || true
@@ -92,7 +92,9 @@ else
   )
 fi
 
-docker run "${RUN_ARGS[@]}" \
+# thanks https://stackoverflow.com/a/73220812
+# MSYS_NO_PATHCONV=1 -> prevent git bash from mangling paths
+MSYS_NO_PATHCONV=1 docker run "${RUN_ARGS[@]}" \
   --network "nt" \
   --network-alias "$TLS_SERVER_NAME" \
   "${MOUNTS[@]}" \
