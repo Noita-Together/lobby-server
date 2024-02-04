@@ -81,7 +81,7 @@ if [ $# -eq 0 ]; then
   RUN_ARGS=(
     -d --name "$CONTAINER_NAME"
     --restart "unless-stopped"
-    -p "$BACKEND_PORT:$APP_LISTEN_PORT" \
+    -p "$BACKEND_PORT:${APP_LISTEN_PORT:-4444}" \
   )
   docker stop "$CONTAINER_NAME" || true
   docker rm "$CONTAINER_NAME" || true
