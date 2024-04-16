@@ -1,9 +1,5 @@
 import { Static, Type as T } from '@sinclair/typebox';
 
-export enum AuthProvider {
-  Twitch = 'twitch',
-}
-
 /**
  * The relevant JWT-defined properties present in the Noita
  * Together JWT
@@ -21,7 +17,6 @@ export type JWT = Static<typeof JWT>;
 export const NTAuth = T.Object({
   preferred_username: T.String(),
   profile_image_url: T.String(),
-  provider: T.Enum(AuthProvider),
 });
 export type NTAuth = Static<typeof NTAuth>;
 
