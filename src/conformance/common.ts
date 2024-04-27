@@ -5,6 +5,7 @@ import { AuthProvider, ClientAuth } from '../runtypes/client_auth';
 import { LobbyState } from '../state/lobby';
 import { BindPublishers } from '../util';
 import { ClientAuthWebSocket, TaggedClientAuth, createMessageHandler } from '../ws_handlers';
+import { RoomName, RoomNameSuccess } from '../room_tracker';
 
 export type MockSentMessage = {
   topic: string | null;
@@ -17,6 +18,7 @@ export const createTestEnv = (
   createRoomId?: () => string,
   createChatId?: () => string,
   createStatsId?: () => string,
+  createRandomRoomName?: (userSuppliedName: string | null) => RoomName,
 ) => {
   const debug = () => {};
 
@@ -55,7 +57,7 @@ export const createTestEnv = (
     createChatId,
   );
 
-  const lobby = new LobbyState(publishers, devMode, createRoomId, createChatId, createStatsId);
+  const lobby = new LobbyState(publishers, devMode, createRoomId, createChatId, createStatsId, createRandomRoomName);
 
   const { signToken, verifyToken } = createJwtFns('test secret', 'test refresh');
 
