@@ -1,10 +1,11 @@
 import { M, NT } from '@noita-together/nt-message';
 import { ClientAuthWebSocket } from '../ws_handlers';
-import { Deferred, Publishers, formatDuration, makeDeferred } from '../util';
+import { Publishers } from '../util';
 import { LobbyActionHandlers } from '../types';
 
 import { IUser, UserState } from './user';
 import { RoomState, RoomStateUpdateOpts } from './room';
+import { RoomName } from '../room_tracker';
 
 export const SYSTEM_USER: IUser = { id: '-1', name: '[SYSTEM]' };
 export const ANNOUNCEMENT: IUser = { id: '-2', name: '[ANNOUNCEMENT]' };
@@ -44,6 +45,7 @@ export class LobbyState implements LobbyActionHandlers {
     private createRoomId?: () => string,
     private createChatId?: () => string,
     private createStatsId?: () => string,
+    private createRoomName?: (userSuppliedName: string | null) => RoomName,
   ) {
     this.publishers = publishers;
     this.broadcast = publishers.broadcast(this.topic);
@@ -225,6 +227,7 @@ export class LobbyState implements LobbyActionHandlers {
       ...(this.createRoomId ? { roomId: this.createRoomId() } : {}),
       ...(this.createChatId ? { createChatId: this.createChatId } : {}),
       ...(this.createStatsId ? { createStatsId: this.createStatsId } : {}),
+      ...(this.createRoomName ? { createRoomName: this.createRoomName } : {}),
     });
   }
 
