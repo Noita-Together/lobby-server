@@ -4,7 +4,7 @@ set -e
 
 function usage() {
   echo "$1"
-  echo "Use: $0 <$(bg_getenvs)>"
+  echo "Use: $0 <$(bg_get_envs)>"
   exit 1
 }
 
