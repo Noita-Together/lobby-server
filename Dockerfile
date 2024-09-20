@@ -19,6 +19,7 @@ ARG UWS_TARGET_LIB=uws_linux_x64_120.node
 RUN find 'node_modules/uWebSockets.js' -name '*.node' -not -name "$UWS_TARGET_LIB" -delete
 
 FROM node:21-slim
+LABEL org.opencontainers.image.source https://github.com/noita-together/lobby-server
 
 ARG UID=0
 ARG GID=0
