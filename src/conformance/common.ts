@@ -1,7 +1,7 @@
 import { RecognizedString } from 'uWebSockets.js';
 import { NT } from '@noita-together/nt-message';
 import { createJwtFns } from '../jwt';
-import { AuthProvider, ClientAuth } from '../runtypes/client_auth';
+import { ClientAuth } from '../runtypes/client_auth';
 import { LobbyState } from '../state/lobby';
 import { BindPublishers } from '../util';
 import { ClientAuthWebSocket, TaggedClientAuth, createMessageHandler } from '../ws_handlers';
@@ -18,7 +18,7 @@ export const createTestEnv = (
   createChatId?: () => string,
   createStatsId?: () => string,
 ) => {
-  const debug = () => {};
+  const debug = () => { };
 
   const sentMessages: MockSentMessage[] = [];
   const closedSockets: { socket: ClientAuthWebSocket; code?: number; shortMessage?: RecognizedString }[] = [];
@@ -71,7 +71,6 @@ export const createTestEnv = (
     sub: userId,
     preferred_username: username,
     profile_image_url: '',
-    provider: AuthProvider.Twitch,
   });
 
   const testToken = (userId: string, username: string) => signToken(userId, testUser(userId, username));
