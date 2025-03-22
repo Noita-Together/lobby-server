@@ -1,0 +1,184 @@
+Minä
+Lammas
+Lentolammas
+Suhiseva lammas
+Skorpioni
+Eväkäs
+Suureväkäs
+Ankka
+Susi
+Nelikoipi
+Poro
+Nahkiainen
+Heikkohurtta
+Hurtta
+Tappurahiisiläinen
+Tappurahiisi
+Tulihiisi
+Jouluhiisi
+Kokkihiisi
+Sähikäismenninkäinen
+Heikko haulikkohiisi
+Haulikkohiisi
+Rynkkyhiisi
+Kranuhiisi
+Miinankylväjä
+Parantajahiisi
+Liimahiisi
+Häivehiisi
+Kilpihiisi
+Myrkkyhiisi
+Isohiisi
+Toimari
+Puistokemisti
+Snipuhiisi
+Märkiäinen
+Raukka
+Liekkari
+Jäähdytyslaite
+Mätänevä ruumis
+Mätänevä kroppa
+Mätänevä pää
+Heikko limanuljaska
+Limanuljaska
+Heikko happonuljaska
+Happonuljaska
+Mulkkio
+Heikko äitinuljaska
+Äitinuljaska
+Möykky
+Kiukkumöykky
+Murkku
+Rotta
+Lepakko
+Suurlepakko
+Pikkutulikärpänen
+Suurtulikärpänen
+Puska
+Plasmakukka
+Amppari
+Konna
+Jättikonna
+Laahustussieni
+Nuijamalikka
+Huhtasieni
+Varjokupla
+Toukka
+Kallorotta
+Kallokärpänen
+Pikkuturso
+Turso
+Sylkyri
+Hiidenkivi
+Lohkare
+Hämis
+Pikkuhämähäkki
+Hämähäkki
+Lukki
+Kasvoton Lukki
+Kammolukki
+Pikkumato
+Mato
+Jättimato
+Kalmamato
+Helvetinmato
+Lennokki
+Jättilaser-lennokki
+Turvalennokki
+Tarkkailija
+Vakoilija
+Pysäyttäjä
+Teloittaja
+Korjauslennokki
+Robottikyttä
+Kyrmyniska
+Salamurhaajarobotti
+Peitsivartija
+KK-Tankki
+IT-Tankki
+Laser-tankki
+Torjuntalaite
+Munkki
+Heinäsirkka
+Tuonelankone
+Marraskone
+Liekkiö
+Jäätiö
+Sähkiö
+Stendari
+Eldari
+Pakkasukko
+Ukko
+Suur-Ukko
+Turvonnu velho
+Sokaisunmestari
+Siirtäjämestari
+Muodonmuutosmestari
+Vaihdosmestari
+Maadoittajamestari
+Palauttajamestari
+Haavoittajamestari
+Kohdennusmestari
+Turvattomuusmestari
+Sätkymestari
+Valaistunut alkemisti
+Kadotettu alkemisti
+Epäalkemisti
+Hyypiö
+Ukkoshyypiö
+Hohtava hyypiö
+Patsas
+Hohtonaamio
+Haamukivi
+Elvytyskristalli
+Houre
+Taikasauva
+Olematon
+Kummitus
+Spiraalikalma
+Kiukkukalma
+Utu-Aave
+Viha-Aave
+Kaamo-Aave
+Neva-Aave
+Hahmonvaihtaja
+Helvetinkatse
+Taivaankatse
+Helvetin sylkijä
+Kirottu kristalli
+Verikristalli
+Taivaskristalli
+Matkija
+Jalkamatkatavara
+Hornantappurahiisi
+Hornahiisi
+Hornasnipuhiisi
+Pahan muisto
+Valhe
+Stevari
+Skoude
+Suomuhauki
+Kolmisilmän koipi
+Kolmisilmän sydän
+Ylialkemisti
+Alkemistin Varjo
+Unohdettu
+Häive
+Tapion vasalli
+Sauvojen tuntija
+Kolmisilmän silmä
+Syväolento
+Limatoukka
+Kolmisilmän Kätyri
+Pienkätyri
+Veska
+Molari
+Mokke
+Seula
+Mestarien mestari
+Kolmisilmä
+Kauhuhirviö
+Toveri
+Mätäryömijä
+Lohkare
+Henkevä potu

@@ -1,0 +1,368 @@
+Bomb
+Spark Bolt
+Magic Arrow
+Magic Bolt
+Burst Of Air
+Energy Orb
+Hookbolt
+Black Hole
+White Hole
+Giga Black Hole
+Giga White Hole
+Omega Black Hole
+Omega White Hole
+Eldritch Portal
+Spitter Bolt
+Large Spitter Bolt
+Giant Spitter Bolt
+Bubble Spark
+Disc Projectile
+Giga Disc Projectile
+Summon Omega Sawblade
+Energy Sphere
+Bouncing Burst
+Arrow
+Pollen
+Glowing Lance
+Holy Lance
+Magic Missile
+Large Magic Missile
+Giant Magic Missile
+Firebolt
+Large Firebolt
+Giant Firebolt
+Odd Firebolt
+Dropper Bolt
+Unstable Crystal
+Dormant Crystal
+Summon Fish
+Summon Deercoy
+Flock Of Ducks
+Worm Launcher
+Explosive Detonator
+Concentrated Light
+Intense Concentrated Light
+Lightning Bolt
+Ball Lightning
+Plasma Beam
+Plasma Beam Cross
+Plasma Cutter
+Digging Bolt
+Digging Blast
+Chainsaw
+Luminous Drill
+Summon Tentacle
+Healing Bolt
+Deadly Heal
+Spiral Shot
+Magic Guard
+Big Magic Guard
+Chain Bolt
+Fireball
+Meteor
+Flamethrower
+Iceball
+Slimeball
+Path Of Dark Flame
+Summon Missile
+Summon Rock Spirit
+Dynamite
+Glitter Bomb
+Triplicate Bolt
+Freezing Gaze
+Pinpoint Of Light
+Prickly Spore Pod
+Glue Ball
+Holy Bomb
+Giga Holy Bomb
+Propane Tank
+Bomb Cart
+Cursed Sphere
+Expanding Sphere
+Earthquake
+Rock
+Summon Egg
+Summon Hollow Egg
+Summon Explosive Box
+Summon Large Explosive Box
+Summon Fly Swarm
+Summon Firebug Swarm
+Summon Wasp Swarm
+Summon Friendly Fly
+Acid Ball
+Thunder Charge
+Firebomb
+Chunk Of Soil
+Death Cross
+Giga Death Cross
+Infestation
+Horizontal Barrier
+Vertical Barrier
+Square Barrier
+Summon Wall
+Summon Platform
+Glittering Field
+Delayedcast
+Long-Distance Cast
+Teleporting Cast
+Warp Cast
+Inner
+Toxic Mist
+Mist Of Spirits
+Slime Mist
+Blood Mist
+Circle Of Fire
+Circle Of Acid
+Circle Of Oil
+Circle Of Water
+Water
+Oil
+Blood
+Acid
+Cement
+Teleport Bolt
+Small Teleport Bolt
+Return
+Swapper
+Homebringer Teleport Bolt
+Nuke
+Giga Nuke
+Fireworks
+Summon Taikasauva
+Touch Of Gold
+Touch Of Water
+Touch Of Oil
+Touch Of Spirits
+Touch Of Gold
+Touch Of Grass
+Touch Of Blood
+Touch Of Smoke
+Destruction
+Double
+Triple
+Quadruple
+Octuple
+Myriad
+Double Scatter
+Triple Scatter
+Quadruple Scatter
+Behind Your Back
+Bifurcated
+Above And Below
+Trifurcated
+Hexagon
+Pentagon
+Iplicate
+Reduce Spread
+Heavy Spread
+Reduce Recharge
+Increase Lifetime
+Reduce Lifetime
+Nolla
+Slow But Steady
+Remove Explosion
+Concentrated Explosion
+Plasma Beam Enhancer
+Add Mana
+Blood Magic
+Gold To Power
+Blood To Power
+Spell Duplication
+Quantum Split
+Gravity
+Anti-Gravity
+Slithering Path
+Chaotic Path
+Ping-Pong Path
+Avoiding Arc
+Floating Arc
+Fly Downwards
+Fly Upwards
+Horizontal Path
+Linear Arc
+Orbiting Arc
+Spiral Arc
+Phasing Arc
+True Orbit
+Bounce
+Remove Bounce
+Homing
+Anti Homing
+Wand Homing
+Short-Range Homing
+Rotate Towards Foes
+Boomerang
+Auto-Aim
+Accelerative Homing
+Aiming Arc
+Projectile Area Teleport
+Piercing Shot
+Drilling Shot
+Damage Plus
+Random Damage
+Bloodlust
+Mana To Damage
+Critical Plus
+Damage Field
+Spells To Power
+Essence To Power
+Null Shot
+Heavy Shot
+Light Shot
+Knockback
+Recoil
+Recoil Damper
+Speed Up
+Accelerating Shot
+Decelerating Shot
+Explosive Projectile
+Clusterbolt
+Water To Poison
+Blood To Acid
+Lava To Blood
+Liquid Detonation
+Toxic Sludge To Acid
+Ground To Sand
+Chaotic Transmutation
+Chaos Magic
+Necromancy
+Light
+Explosion
+Magical Explosion
+Explosion Of Brimstone
+Explosion Of Poison
+Explosion Of Spirits
+Explosion Of Thunder
+Circle Of Fervour
+Circle Of Transmogrification
+Circle Of Unstable Metamorphosis
+Circle Of Thunder
+Circle Of Stillness
+Circle Of Vigour
+Circle Of Displacement
+Circle Of Buoyancy
+Circle Of Shielding
+Projectile Transmutation Field
+Projectile Thunder Field
+Projectile Gravity Field
+Powder Vacuum Field
+Liquid Vacuum Field
+Vacuum Field
+Sea Of Lava
+Sea Of Alcohol
+Sea Of Oil
+Sea Of Water
+Summon Swamp
+Sea Of Acid
+Sea Of Flammable Gas
+Sea Of Mimicium
+Rain Cloud
+Oil Cloud
+Blood Cloud
+Acid Cloud
+Thundercloud
+Electric Charge
+Matter Eater
+Freeze Charge
+Critical On Burning
+Critical On Wet Enemies
+Critical On Oiled Enemies
+Critical On Bloody Enemies
+Charm On Toxic Sludge
+Explosion On Slimy Enemies
+Explosion On Drunk Enemies
+Petrify
+Downwards Bolt Bundle
+Octagonal Bolt Bundle
+Fizzle
+Explosive Bounce
+Bubbly Bounce
+Concentrated Light Bounce
+Plasma Beam Bounce
+Larpa Bounce
+Sparkly Bounce
+Lightning Bounce
+Vacuum Bounce
+Fireball Thrower
+Lightning Thrower
+Tentacler
+Plasma Beam Thrower
+Two-Way Fireball Thrower
+Personal Fireball Thrower
+Personal Lightning Caster
+Personal Tentacler
+Personal Gravity Field
+Venomous Curse
+Weakening Curse
+Sawblade Orbit
+Fireball Orbit
+Nuke Orbit
+Plasma Beam Orbit
+Orbit Larpa
+Chain
+Electric Arc
+Fire Arc
+Gunpowder Arc
+Poison Arc
+Earthquake Shot
+All-Seeing Eye
+Firecrackers
+Acid Trail
+Poison Trail
+Oil Trail
+Water Trail
+Gunpowder Trail
+Fire Trail
+Burning Trail
+Torch
+Electric Torch
+Energy Shield
+Energy Shield Sector
+Projectile Energy Shield
+Summon Tiny Ghost
+Ocarina
+Kantele
+Random
+Random Projectile
+Random Modifier
+Random Static Projectile
+Copy Random
+Copy Random Thrice
+Copy Three Randoms
+Spells To Nukes
+Spells To Giga Sawblades
+Spells To Magic Missiles
+Spells To Death Crosses
+Spells To Black Holes
+Spells To Acid
+The End Of Everything
+Summon Portal
+Add Trigger
+Add Timer
+Add Expiration Trigger
+Chaos Larpa
+Downwards Larpa
+Upwards Larpa
+Copy Trail
+Larpa Explosion
+Alpha
+Gamma
+Tau
+Omega
+Mu
+Phi
+Sigma
+Zeta
+Meteorisade
+Matosade
+Wand Refresh
+Red Glimmer
+Orange Glimmer
+Green Glimmer
+Yellow Glimmer
+Purple Glimmer
+Blue Glimmer
+Rainbow Glimmer
+Invisible
+Rainbow Trail
+Cessation
