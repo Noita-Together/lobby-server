@@ -52,6 +52,7 @@ export type RoomStateUpdateOpts = UpdateRoomOpts | UpdateBigRoomOpts;
  */
 export class RoomState implements GameActionHandlers<'cPlayerMove'> {
   private static readonly emptyFlags = M.sRoomFlagsUpdated({}, true);
+  private static readonly emptyModFlags = M.sRoomModFlagsUpdated({}, true);
 
   private readonly lobby: LobbyState;
   private readonly broadcast: ReturnType<Publishers['broadcast']>;
@@ -72,6 +73,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
   private password?: string;
 
   private lastFlags: Uint8Array;
+  private modFlags: Uint8Array;
   private stats: StatsRecorder | undefined = undefined;
   private pastStats = new Map<string, string>();
 
@@ -108,6 +110,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
     this.inProgress = false;
 
     this.lastFlags = RoomState.emptyFlags;
+    this.modFlags = RoomState.emptyModFlags
 
     // this.playerPositions = new PlayerPositions(this.broadcast, 50);
   }
@@ -336,6 +339,20 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
    */
   getFlags(): Uint8Array {
     return this.lastFlags;
+  }
+
+  /**
+   * Update the room's mod flags
+  */
+  setModFlags(actor: UserState, payload: NT.ClientModFlagsUpdate): string | void {
+    if (this.owner !== actor) return "Can't do that.";
+    debug(this.id, `updating mod flags: ${JSON.stringify(payload.toJSON())}`)
+    this.modFlags = M.sRoomModFlagsUpdated(payload, true)
+    this.broadcast(this.modFlags)
+  }
+
+  getModFlags(): Uint8Array {
+    return this.modFlags;
   }
 
   /**

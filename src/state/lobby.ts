@@ -282,6 +282,16 @@ export class LobbyState implements LobbyActionHandlers {
     if (reason) user.send(M.sRoomFlagsUpdateFailed({ reason }));
   }
 
+  cRoomModFlagsUpdate(payload: NT.ClientModFlagsUpdate, user: UserState) {
+    debug(`cRoomModFlagsUpdate from ${user.name} for room ${user.room()?.id} with payload: ${JSON.stringify(payload)}`)
+    const rejectionMessage = user.room()?.setModFlags(user, payload);
+    if(rejectionMessage) {
+      rejectionMessage && user.send(M.sRoomModFlagsUpdateFailed({ reason: rejectionMessage }));
+      const modFlags = user.room()?.getModFlags();
+      modFlags && user.send(modFlags);
+    }
+  }  
+
   cJoinRoom(payload: NT.ClientJoinRoom, user: UserState) {
     const room = this.rooms.get(payload.id);
     if (!room) {
