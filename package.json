@@ -23,7 +23,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@noita-together/nt-message": "^0.0.1",
+    "@noita-together/nt-message": "github:Shortman422/nt-message#bee3d05929fc682da5246512c5af6914a1068a90",
     "@sinclair/typebox": "^0.31.17",
     "debug": "^4.3.4",
     "jsonwebtoken": "^9.0.2",

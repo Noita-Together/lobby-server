@@ -156,6 +156,7 @@ export class UserState implements IUser {
     if (!wasCreate) {
       this.send(M.sJoinRoomSuccess(room.getState()));
       this.send(room.getFlags());
+      this.send(room.getModFlags());
     }
     for (const user of room.getUsers()) {
       if (this === user) continue;
