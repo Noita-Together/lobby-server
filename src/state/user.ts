@@ -19,6 +19,7 @@ const uaccess = new Map<string, number>([
   ['kabbypls', 3],
   ['DunkOrSlam', 3],
   ['myndzi', 3],
+  ['SnekGregory', 3],
 ]);
 
 let instanceId = 0;
