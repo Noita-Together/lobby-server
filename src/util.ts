@@ -1,4 +1,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { TemplatedApp, WebSocket } from 'uWebSockets.js';
 import { v4 as uuidv4 } from 'uuid';
 import { M, NT } from '@noita-together/nt-message';
@@ -6,6 +9,7 @@ import { M, NT } from '@noita-together/nt-message';
 import { IUser } from './state/user';
 
 import Debug from 'debug';
+import { RoomTracker } from './room_tracker';
 const debug = Debug('nt:util');
 
 type HasPublish = Pick<WebSocket<unknown>, 'publish'>;
@@ -106,3 +110,16 @@ export const formatBytes = (bytes: number) => {
   }
   return `${bytes.toFixed(2)} B`;
 };
+
+export const randomRoomName = (() => {
+  const load = (filename: string) =>
+    readFileSync(resolve(__dirname, 'wordlists', filename), 'utf-8')
+      .split(/[\r\n]+/)
+      .filter((v) => !!v);
+
+  const spells = load('allspells-beta.txt');
+  const perks = load('allperks-beta.txt');
+
+  const rt = new RoomTracker([spells, perks]);
+  return (userSuppliedName: string | null) => rt.acquire(userSuppliedName);
+})();

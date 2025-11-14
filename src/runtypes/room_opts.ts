@@ -2,6 +2,7 @@ import { Static, Type as T } from '@sinclair/typebox';
 import { Value } from '@sinclair/typebox/value';
 
 import Debug from 'debug';
+import { randomRoomName } from '../util';
 const debug = Debug('nt:runtypes:room_options');
 
 // https://github.com/validatorjs/validator.js/blob/b958bd7d1026a434ad3bf90064d3dcb8b775f1a9/src/lib/isAscii.js#L7
@@ -48,10 +49,9 @@ export const validateRoomOpts = <
   Schema extends typeof CreateRoomOpts | typeof CreateBigRoomOpts | typeof UpdateRoomOpts | typeof UpdateBigRoomOpts,
 >(
   schema: Schema,
-  { name, password, ...rest }: Static<Schema>,
+  { password, ...rest }: Static<Schema>,
 ): string | Static<Schema> => {
   const opts: Static<Schema> = { ...rest };
-  if (name) opts.name = name.trim();
   if (password) opts.password = password.trim();
 
   if (!Value.Check(schema, opts)) {

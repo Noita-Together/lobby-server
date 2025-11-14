@@ -2,6 +2,7 @@ import { M, NT } from '@noita-together/nt-message';
 import { SYSTEM_USER } from '../state/lobby';
 import { ClientAuthWebSocket } from '../ws_handlers';
 import { createTestEnv, MockSentMessage } from './common';
+import { RoomNameSuccess } from '../room_tracker';
 
 const uuidRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -295,6 +296,7 @@ describe('lobby conformance tests', () => {
         () => 'room',
         () => 'chat',
         () => 'stats',
+        (name: string | null): RoomNameSuccess => ({ ok: true, name: "host's room", release: () => {} }),
       );
       const host = testSocket('hostId', 'host');
       const player = testSocket('playerId', 'player');
@@ -422,7 +424,7 @@ describe('lobby conformance tests', () => {
             gamemode: 0,
             locked: false,
             maxUsers: 3,
-            name: "user1's room",
+            name: 'auto-generated',
             users: [
               {
                 name: 'user1',
@@ -444,7 +446,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               owner: 'user1',
               protected: false,
             },
@@ -494,7 +496,7 @@ describe('lobby conformance tests', () => {
             id: 'room1',
             locked: false,
             maxUsers: 3,
-            name: "user1's room",
+            name: 'auto-generated',
             users: [
               {
                 name: 'user1',
@@ -563,7 +565,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -585,7 +587,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: true,
               },
@@ -617,7 +619,7 @@ describe('lobby conformance tests', () => {
               id: 'room1',
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -686,7 +688,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -708,7 +710,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: true,
               },
@@ -749,7 +751,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -771,7 +773,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: true,
               },
@@ -894,7 +896,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -916,7 +918,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: false,
               },
@@ -962,7 +964,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -984,7 +986,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: false,
               },
@@ -1032,7 +1034,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -1054,7 +1056,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: false,
               },
@@ -1075,7 +1077,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -1097,7 +1099,7 @@ describe('lobby conformance tests', () => {
                 id: 'room2',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: false,
               },
@@ -1247,7 +1249,7 @@ describe('lobby conformance tests', () => {
             id: 'room1',
             locked: false,
             maxUsers: 3,
-            name: "user1's room",
+            name: 'auto-generated',
             users: [
               {
                 name: 'user1',
@@ -1354,7 +1356,7 @@ describe('lobby conformance tests', () => {
             id: 'room1',
             locked: false,
             maxUsers: 3,
-            name: "user1's room",
+            name: 'auto-generated',
             users: [
               {
                 name: 'user1',
@@ -1401,7 +1403,7 @@ describe('lobby conformance tests', () => {
           M.cRoomCreate({
             gamemode: 0,
             maxUsers: 3,
-            name: "user2's room",
+            name: 'auto-generated',
           }),
         ],
         [
@@ -1421,7 +1423,7 @@ describe('lobby conformance tests', () => {
             gamemode: 0,
             locked: false,
             maxUsers: 3,
-            name: "user2's room",
+            name: 'auto-generated',
             users: [
               {
                 name: 'user2',
@@ -1443,7 +1445,7 @@ describe('lobby conformance tests', () => {
               id: 'room2',
               locked: false,
               maxUsers: 3,
-              name: "user2's room",
+              name: 'auto-generated',
               owner: 'user2',
               protected: false,
             },
@@ -1482,7 +1484,7 @@ describe('lobby conformance tests', () => {
             id: 'room1',
             locked: false,
             maxUsers: 3,
-            name: "user1's room",
+            name: 'auto-generated',
             users: [
               {
                 name: 'user1',
@@ -1723,7 +1725,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -1745,7 +1747,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: false,
               },
@@ -1789,7 +1791,7 @@ describe('lobby conformance tests', () => {
               gamemode: 0,
               locked: false,
               maxUsers: 3,
-              name: "user1's room",
+              name: 'auto-generated',
               users: [
                 {
                   name: 'user1',
@@ -1811,7 +1813,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: false,
               },
@@ -1841,7 +1843,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: false,
               },
@@ -1970,7 +1972,7 @@ describe('lobby conformance tests', () => {
                 id: 'room1',
                 locked: false,
                 maxUsers: 3,
-                name: "user1's room",
+                name: 'auto-generated',
                 owner: 'user1',
                 protected: true,
               },
@@ -2172,7 +2174,7 @@ describe('lobby conformance tests', () => {
             id: 'room1',
             locked: false,
             maxUsers: 3,
-            name: "user1's room",
+            name: 'auto-generated',
             users: [
               {
                 name: 'user1',
@@ -2289,7 +2291,7 @@ describe('lobby conformance tests', () => {
             id: 'room1',
             locked: false,
             maxUsers: 3,
-            name: "user1's room",
+            name: 'auto-generated',
             users: [
               {
                 name: 'user1',
@@ -2675,6 +2677,7 @@ describe('lobby conformance tests', () => {
         () => `room${roomId++}`,
         () => `chat${chatId++}`,
         () => `stats${statsId++}`,
+        (name: string | null) => ({ ok: true, name: name ?? 'auto-generated', release: () => {} }),
       );
 
       const { sentMessages, testSocket, handleOpen, handleMessage } = env;

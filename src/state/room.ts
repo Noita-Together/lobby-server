@@ -1,3 +1,5 @@
+import { M, NT, tagPlayerMove } from '@noita-together/nt-message';
+
 import {
   CreateBigRoomOpts,
   CreateRoomOpts,
@@ -5,8 +7,7 @@ import {
   UpdateRoomOpts,
   validateRoomOpts,
 } from '../runtypes/room_opts';
-import { Deferred, Publishers, createChat, formatDuration, makeDeferred } from '../util';
-import { M, NT, tagPlayerMove } from '@noita-together/nt-message';
+import { Deferred, Publishers, createChat, formatDuration, makeDeferred, randomRoomName } from '../util';
 import { GameActionHandlers } from '../types';
 import { defaultEnv, statsUrl } from '../env_vars';
 const { DRAIN_GRACE_TIMEOUT_MS, DRAIN_NOTIFY_INTERVAL_MS } = defaultEnv;
@@ -14,6 +15,7 @@ const { DRAIN_GRACE_TIMEOUT_MS, DRAIN_NOTIFY_INTERVAL_MS } = defaultEnv;
 import { IUser, UserState } from './user';
 import { LobbyState, SYSTEM_USER } from './lobby';
 import { StatsEvent, StatsRecorder } from './stats_recorder';
+import { RoomName } from '../room_tracker';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -85,6 +87,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
     owner: UserState,
     { name, password, gamemode, maxUsers }: RoomStateCreateOpts,
     publishers: Publishers,
+    private releaseRoomName: () => void,
     roomId?: string,
     createChatId?: () => string,
     private createStatsId?: () => string,
@@ -178,6 +181,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
     roomId,
     createChatId,
     createStatsId,
+    createRoomName,
   }: {
     lobby: LobbyState;
     owner: UserState;
@@ -187,6 +191,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
     roomId?: string;
     createChatId?: () => string;
     createStatsId?: () => string;
+    createRoomName?: (userSuppliedName: string | null) => RoomName;
   }): RoomState | void {
     let opts: RoomStateCreateOpts | string;
 
@@ -194,6 +199,19 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
       owner.send(M.sRoomCreateFailed({ reason: 'Room creation is disabled at the moment, Server is in dev mode :)' }));
       return;
     }
+
+    // if the room name is specified *and* the user has access, use the name as-is. otherwise,
+    // pull a random room name from the pool
+    const trimmed = owner.uaccess > 0 ? _opts.name?.trim() : null;
+    const roomName: RoomName = (createRoomName ?? randomRoomName)(trimmed);
+
+    if (roomName.ok === false) {
+      // no available room names
+      owner.send(M.sRoomCreateFailed({ reason: roomName.error }));
+      return;
+    }
+
+    _opts.name = roomName.name;
 
     opts = validateRoomOpts(owner.uaccess > 1 ? CreateBigRoomOpts : CreateRoomOpts, _opts);
 
@@ -205,11 +223,7 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
     // user owned another room. probably they reconnected. destroy old room.
     owner.room()?.delete(owner);
 
-    if (owner.uaccess === 0) {
-      opts.name = `${owner.name}'s room`;
-    }
-
-    const room = new RoomState(lobby, owner, opts, publishers, roomId, createChatId, createStatsId);
+    const room = new RoomState(lobby, owner, opts, publishers, roomName.release, roomId, createChatId, createStatsId);
     debug(room.id, 'created');
 
     room.users.add(owner);
@@ -618,6 +632,8 @@ export class RoomState implements GameActionHandlers<'cPlayerMove'> {
    * be used only by system processes.
    */
   destroy() {
+    // give this room's name back to the pool
+    this.releaseRoomName();
     this.broadcast(M.sRoomDeleted({ id: this.id }));
 
     // this.playerPositions.destroy();
